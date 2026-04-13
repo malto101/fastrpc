@@ -77,7 +77,11 @@
 
 #define VENDOR_DSP_LOCATION "/vendor/dsp/"
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
+<<<<<<< HEAD
 #define HEXAGON_LIBS_PATH_PREFIX CONFIG_BASE_DIR "/hexagon"
+=======
+#define HEXAGON_LIBS_PATH_PREFIX CONFIG_BASE_DIR "hexagon"
+>>>>>>> d21d358 (Build per-domain DSP search path cache with ARCH_VER)
 
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
 static char DSP_SEARCH_PATHS_CACHE[NUM_DOMAINS][PATH_MAX] = {{0}};
