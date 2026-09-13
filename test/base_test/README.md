@@ -249,6 +249,19 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 # Run a specific test case
 ./bin/test-fastrpc -g DspHeapStress -n SmallFixedSize
 
+# List test metadata without accessing a DSP or running tests
+./bin/test-fastrpc -l tests
+./bin/test-fastrpc -l groups
+./bin/test-fastrpc -l tags
+
+# Equivalent long forms
+./bin/test-fastrpc --list-tests
+./bin/test-fastrpc --list-groups
+./bin/test-fastrpc --list-tags
+
+# List matching tests without running them
+./bin/test-fastrpc --list-tests -G DspQueueCreate --all-tags negative
+
 # Verbose output (prints each test name as it runs)
 ./bin/test-fastrpc -v
 
@@ -267,6 +280,10 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 # Filter by tag (AND — run tests that have all of these tags)
 ./bin/test-fastrpc --all-tags UserHeap dsp_heap_stress
 ```
+
+Listing commands print one sorted entry per line. Existing group, test-name,
+and tag filters narrow test and group listings. Tag listings always show every
+available tag. Test setup and DSP discovery are never performed.
 
 ---
 
