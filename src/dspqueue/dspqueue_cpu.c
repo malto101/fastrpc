@@ -93,6 +93,7 @@ struct dspqueue_domain_queues {
   pthread_t receive_signal_thread;
   int dsp_error;
   int have_dspsignal;
+  int teardown_failed;
 };
 
 static inline void free_skel_uri(remote_rpc_get_uri_t *dspqueue_skel) {
@@ -192,6 +193,11 @@ static AEEResult init_domain_queues_locked(int domain) {
   errno = 0;
   assert(IS_VALID_EFFECTIVE_DOMAIN_ID(domain));
   if (queues->domain_queues[domain] != NULL) {
+    if (queues->domain_queues[domain]->teardown_failed) {
+      FARF(ERROR,
+           "Domain %d is unavailable after failed queue teardown", domain);
+      return AEE_EBADSTATE;
+    }
     return AEE_SUCCESS;
   }
 
@@ -372,9 +378,12 @@ bail:
 }
 
 // Must hold queues->mutex.
+// Teardown is fail-closed when the receive worker cannot be proven to have
+// exited. The domain object is retained and quarantined rather than freeing
+// state that a still-running worker may dereference.
 static AEEResult destroy_domain_queues_locked(int domain) {
 
-  AEEResult nErr = AEE_SUCCESS;
+  AEEResult nErr = AEE_SUCCESS, err = AEE_SUCCESS;
   struct dspqueue_domain_queues *dq = NULL;
   void *ret;
 
@@ -389,24 +398,42 @@ static AEEResult destroy_domain_queues_locked(int domain) {
     if (dq->dsp_error) {
       // Ignore errors if the DSP process died
       dspqueue_rpc_cancel_wait_signal(dq->dsp_handle);
-    } else {
-      VERIFY((nErr = dspqueue_rpc_cancel_wait_signal(dq->dsp_handle)) == 0);
+    } else if ((err = dspqueue_rpc_cancel_wait_signal(dq->dsp_handle)) != 0) {
+      dq->teardown_failed = 1;
+      FARF(ERROR,
+           "Failed to cancel receive signal wait for domain %d; "
+           "retaining domain state",
+           domain);
+      return err;
     }
     FARF(MEDIUM, "Join receive signal thread");
-    VERIFY((nErr = pthread_join(dq->receive_signal_thread, &ret)) == 0);
-    FARF(MEDIUM, " - Join receive signal thread done");
-    if (!dq->dsp_error) {
-      VERIFY(((uintptr_t)ret) == 0);
+    if ((err = pthread_join(dq->receive_signal_thread, &ret)) != 0) {
+      dq->teardown_failed = 1;
+      FARF(ERROR,
+           "Failed to join receive signal thread for domain %d; "
+           "retaining domain state",
+           domain);
+      return err;
+    } else if (!dq->dsp_error && ((uintptr_t)ret != 0)) {
+      nErr = -1;
     }
+    FARF(MEDIUM, " - Join receive signal thread done");
 
     pthread_mutex_lock(&dq->send_signal_mutex);
     dq->send_signal_mask |= SIGNAL_BIT_CANCEL;
     pthread_cond_signal(&dq->send_signal_cond);
     pthread_mutex_unlock(&dq->send_signal_mutex);
     FARF(MEDIUM, "Join send signal thread");
-    VERIFY((nErr = pthread_join(dq->send_signal_thread, &ret)) == 0);
-    if (!dq->dsp_error) {
-      VERIFY(((uintptr_t)ret) == 0);
+    if ((err = pthread_join(dq->send_signal_thread, &ret)) != 0) {
+      dq->teardown_failed = 1;
+      FARF(ERROR,
+           "Failed to join send signal thread for domain %d; "
+           "retaining domain state",
+           domain);
+      return err;
+    } else if (!dq->dsp_error && ((uintptr_t)ret != 0) &&
+               nErr == AEE_SUCCESS) {
+      nErr = -1;
     }
     FARF(MEDIUM, " - Join send signal thread done");
 
@@ -419,10 +446,13 @@ static AEEResult destroy_domain_queues_locked(int domain) {
     fastrpc_munmap(dq->domain, dq->state_fd, dq->state,
                    sizeof(struct dspqueue_process_queue_state));
   } else {
-    VERIFY((nErr = dspqueue_rpc_close(dq->dsp_handle)) == 0);
-    VERIFY((nErr = fastrpc_munmap(
-                dq->domain, dq->state_fd, dq->state,
-                sizeof(struct dspqueue_process_queue_state))) == 0);
+    if ((err = dspqueue_rpc_close(dq->dsp_handle)) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
+    }
+    if ((err = fastrpc_munmap(dq->domain, dq->state_fd, dq->state,
+                              sizeof(struct dspqueue_process_queue_state))) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
+    }
   }
 
   rpcmem_free(dq->state);
@@ -430,7 +460,6 @@ static AEEResult destroy_domain_queues_locked(int domain) {
 
   queues->domain_queues[domain] = NULL;
 
-bail:
   if (nErr != AEE_SUCCESS) {
     FARF(ERROR, "Error 0x%x: %s failed (domain %d) errno %s", nErr, __func__,
          domain, strerror(errno));
@@ -445,7 +474,7 @@ AEEResult dspqueue_create(int domain, uint32_t flags, uint32_t req_queue_size,
                           void *callback_context, dspqueue_t *queue) {
 
   struct dspqueue *q = NULL;
-  AEEResult nErr = AEE_SUCCESS;
+  AEEResult nErr = AEE_SUCCESS, err = AEE_SUCCESS;
   uint32_t o;
   int mutex_init = 0;
   pthread_attr_t tattr;
@@ -733,7 +762,9 @@ bail:
     dq->num_queues--;
     if (dq->num_queues == 0) {
       // This would have been the first queue for this domain
-      destroy_domain_queues_locked(domain);
+      err = destroy_domain_queues_locked(domain);
+      if (err && nErr == AEE_SUCCESS)
+        nErr = err;
     }
     pthread_mutex_unlock(&queues->mutex);
   }
@@ -804,7 +835,7 @@ AEEResult dspqueue_close(dspqueue_t queue) {
 
   struct dspqueue *q = queue;
   struct dspqueue_domain_queues *dq = NULL;
-  AEEResult nErr = AEE_SUCCESS;
+  AEEResult nErr = AEE_SUCCESS, err = AEE_SUCCESS;
   int32_t imported;
   unsigned i;
 
@@ -951,8 +982,10 @@ AEEResult dspqueue_close(dspqueue_t queue) {
   if (dq->num_queues == 0) {
     FARF(ALWAYS, "%s: destroying queues and signals for domain %d", __func__,
          q->domain);
-    destroy_domain_queues_locked(q->domain);
-    if (q->have_driver_signaling)
+    err = destroy_domain_queues_locked(q->domain);
+    if (err && nErr == AEE_SUCCESS)
+      nErr = err;
+    if (!err && q->have_driver_signaling)
       dspsignal_domain_deinit(q->domain);
   }
   pthread_mutex_unlock(&queues->mutex);
