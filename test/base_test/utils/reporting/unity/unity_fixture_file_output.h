@@ -192,6 +192,28 @@ const unity_test_case_tags_t *unity_test_case_tag_registry_find(const char *grou
                                                                 const char *name);
 
 /**
+ * @brief Check whether a NULL-terminated tag list passes all active filters.
+ *
+ * Core matching logic shared by unity_test_case_tag_filter_passes() (via the
+ * per-test-case registry) and any other taggable entity that keeps its own
+ * NULL-terminated tag list — e.g. the fuzz suite registry in
+ * root_all_tests.c.
+ *
+ * Returns 1 (passes) when all active filters pass:
+ *   - --any-tags filter passes when any_tag_count == 0 (inactive) OR tags
+ *     contains at least one of the any_tags[] values.
+ *   - --all-tags filter passes when all_tag_count == 0 (inactive) OR tags
+ *     contains every one of the all_tags[] values.
+ *
+ * Tags are compared case-sensitively (strcmp). Neither filter active means
+ * every tag list passes, including an empty one.
+ *
+ * @param tags  NULL-terminated array of tag strings.
+ * @return 1 if tags passes all active filters, 0 otherwise.
+ */
+int unity_tag_list_matches_filters(const char *const *tags);
+
+/**
  * @brief Check whether a test case passes all active tag filters.
  *
  * Returns 1 (run) when all active filters pass:

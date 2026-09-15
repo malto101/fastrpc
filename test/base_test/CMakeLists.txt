@@ -31,6 +31,14 @@
 #   ./bin/test-fastrpc -g DspHeapStress       # run one group
 #   ./bin/test-fastrpc -v                     # verbose output
 #
+# FUZZ TESTS (opt-in, off by default)
+# ------------------------------------
+#   cmake -B builddir -DENABLE_FUZZ_TESTS=ON ...   # in addition to the flags above
+#   cmake --build builddir
+#   ./bin/test-fastrpc --fuzz                          # run every registered suite
+#   ./bin/test-fastrpc --fuzz --tags dspqueue_create    # narrow to one suite by tag
+#   ./bin/test-fastrpc --fuzz corpus/dspqueue_create/   # override that suite's default corpus
+#
 # ADDING A NEW FEATURE SUITE
 # ---------------------------
 #   1. Create test/feature/<name>/ with test_*.c, all_tests.c, and any
@@ -52,6 +60,23 @@
 #   2. Declare TEST_<Group>_GROUP_RUNNER in all_tests.c and call
 #      RUN_TEST_GROUP(<Group>).
 #   3. cmake --build builddir  (CONFIGURE_DEPENDS re-globs automatically).
+#
+# ADDING A NEW FUZZ SUITE
+# ------------------------
+#   1. Create test/fuzz/<name>/ (named after the module, like _unit_suites/
+#      _feat_suites — e.g. dspqueue, not dspqueue_create) with a
+#      fuzz_<api>_run(data, size) entry point per fuzzed API (fuzz_*.c) and,
+#      optionally, a corpus/<api>/ dir of seed inputs. Don't name any of them
+#      LLVMFuzzerTestOneInput — every entry point is dispatched through the
+#      fuzz_suites[] registry in root_all_tests.c instead.
+#   2. Register the entry point in fuzz_suites[] in root_all_tests.c: its
+#      selection tag(s) (matched against --tags/--any-tags/--all-tags exactly
+#      like TEST_CASE_TAGS()), default corpus dir (relative to CWD, typically
+#      corpus/<api>), and function pointer.
+#   3. Add the suite name to _fuzz_suites in test/fuzz/CMakeLists.txt.
+#   4. Build with -DENABLE_FUZZ_TESTS=ON; run via ./bin/test-fastrpc --fuzz
+#      (add --tags <api> once more than one suite is registered, to run just
+#      one of them).
 # ============================================================================
 
 cmake_minimum_required(VERSION 3.21)
@@ -112,6 +137,12 @@ set(ANDROID_NDK_HOME "" CACHE PATH
 
 set(DSP_ARCH "73" CACHE STRING
     "Hexagon DSP architecture version number (e.g. 68, 73, 75)")
+
+option(ENABLE_FUZZ_TESTS
+    "Compile the libFuzzer-based fuzz harnesses under test/fuzz into \
+test-fastrpc, enabling its --fuzz flag (requires a clang toolchain with the \
+libFuzzer/sanitizer runtime for the target)"
+    OFF)
 
 # ============================================================================
 # Resolve FASTRPC_ROOT
@@ -288,6 +319,10 @@ set(ALL_SUITE_LIBS "")
 
 add_subdirectory(test/unit)
 add_subdirectory(test/feature)
+
+if(ENABLE_FUZZ_TESTS)
+    add_subdirectory(test/fuzz)
+endif()
 
 # ============================================================================
 # Main deployable artifacts  →  <builddir>/bin/

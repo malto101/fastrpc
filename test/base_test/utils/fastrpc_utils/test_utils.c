@@ -54,6 +54,7 @@ test_config_t g_test_config = {
     .domain_count = 0,
     .unsigned_pd = 1,
     .list_mode = TEST_LIST_NONE,
+    .fuzz_mode = 0,
     .logs_spec = NULL,    /* NULL = use registry defaults     */
     .any_tags = { NULL }, /* populated by --any-tags / --tags */
     .any_tag_count = 0,
@@ -246,6 +247,7 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
     g_test_config.domain_count = 0;
     g_test_config.unsigned_pd = 1;
     g_test_config.list_mode = TEST_LIST_NONE;
+    g_test_config.fuzz_mode = 0;
     g_test_config.logs_spec = NULL;
     g_test_config.any_tag_count = 0;
     g_test_config.all_tag_count = 0;
@@ -276,6 +278,14 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
                 free(filtered);
                 return -1;
             }
+        } else if (strcmp(argv[i], "--fuzz") == 0) {
+            /*
+             * Recognised regardless of ENABLE_FUZZ_TESTS so a build without
+             * fuzz support can still report a clear error instead of Unity
+             * treating it as an unknown/positional argument. See
+             * run_base_tests() in root_all_tests.c for the dispatch.
+             */
+            g_test_config.fuzz_mode = 1;
         } else if (strcmp(argv[i], "-d") == 0) {
             int domain_id;
 
@@ -356,6 +366,13 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
     }
 
     if (g_test_config.list_mode != TEST_LIST_NONE) {
+        *out_argc = fi;
+        *out_argv = filtered;
+        return 0;
+    }
+
+    if (g_test_config.fuzz_mode) {
+        /* Fuzzing needs no live DSP session — skip domain discovery. */
         *out_argc = fi;
         *out_argv = filtered;
         return 0;

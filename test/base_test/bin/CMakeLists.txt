@@ -44,6 +44,54 @@ set_target_properties(test-fastrpc PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
+# When ENABLE_FUZZ_TESTS is on, link the fuzz suite libs (built by
+# test/fuzz/CMakeLists.txt, sanitized on their own) into test-fastrpc and give
+# it a --fuzz flag (see root_all_tests.c). Only the fuzz suite objects are
+# compiled with the sanitizers; the link step still needs the same
+# -fsanitize= flags so the runtime they depend on is present in the binary.
+if(ENABLE_FUZZ_TESTS)
+    target_link_libraries(test-fastrpc PRIVATE
+        ${ALL_FUZZ_SUITE_LIBS}
+    )
+
+    target_compile_definitions(test-fastrpc PRIVATE
+        ENABLE_FUZZ_TESTS
+    )
+
+    target_link_options(test-fastrpc PRIVATE
+        -fsanitize=fuzzer-no-link,address,undefined
+    )
+
+    # root_all_tests.c owns main() and calls LLVMFuzzerRunDriver() directly
+    # instead of using libFuzzer's own driver entry point (see
+    # test/fuzz/CMakeLists.txt) — -fsanitize=fuzzer-no-link deliberately
+    # skips auto-linking any libFuzzer runtime, so the "no_main" variant
+    # (LLVMFuzzerRunDriver + friends, no main()) needs linking explicitly.
+    # Resolved through the compiler itself, not hardcoded, so it honours
+    # whatever --target/-resource-dir this build is already using.
+    separate_arguments(_c_flags_list NATIVE_COMMAND "${CMAKE_C_FLAGS}")
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}" ${_c_flags_list}
+                -print-file-name=libclang_rt.fuzzer_no_main-aarch64.a
+        OUTPUT_VARIABLE _fuzzer_no_main_lib
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if(NOT EXISTS "${_fuzzer_no_main_lib}")
+        message(FATAL_ERROR
+            "Could not locate libclang_rt.fuzzer_no_main-aarch64.a via the "
+            "compiler (got: '${_fuzzer_no_main_lib}'). --fuzz needs this "
+            "compiler-rt runtime linked explicitly since root_all_tests.c "
+            "owns main() itself — ensure your clang installation ships "
+            "aarch64 compiler-rt libraries for the target triple.")
+    endif()
+
+    # libclang_rt.fuzzer_no_main is C++ (std::string, containers, operator
+    # new/delete) but test-fastrpc links as a C program (plain clang, not
+    # clang++) — pull in libstdc++ explicitly for those symbols.
+    target_link_libraries(test-fastrpc PRIVATE "${_fuzzer_no_main_lib}" stdc++)
+endif()
+
 # ============================================================================
 # libbase_test.so — plugin for the legacy fastrpc_test dlopen() runner
 # ============================================================================

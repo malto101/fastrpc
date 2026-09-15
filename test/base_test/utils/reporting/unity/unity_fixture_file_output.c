@@ -299,6 +299,53 @@ const unity_test_case_tags_t *unity_test_case_tag_registry_find(const char *grou
 }
 
 /**
+ * unity_tag_list_matches_filters
+ *
+ * Core AND/OR matching logic against a NULL-terminated tag list — see the
+ * doc comment in unity_fixture_file_output.h. Shared by
+ * unity_test_case_tag_filter_passes() below and by any other taggable
+ * registry (e.g. the fuzz suite registry in root_all_tests.c) that wants
+ * identical --any-tags/--all-tags semantics without a per-test-case lookup.
+ */
+int unity_tag_list_matches_filters(const char *const *tags)
+{
+    if (g_test_config.any_tag_count == 0 && g_test_config.all_tag_count == 0)
+        return 1;
+
+    /* --any-tags filter (OR): at least one any_tag must appear in tags. */
+    if (g_test_config.any_tag_count > 0) {
+        int any_matched = 0;
+        for (int fi = 0; fi < g_test_config.any_tag_count && !any_matched; fi++) {
+            for (const char *const *tp = tags; *tp != NULL; tp++) {
+                if (strcmp(*tp, g_test_config.any_tags[fi]) == 0) {
+                    any_matched = 1;
+                    break;
+                }
+            }
+        }
+        if (!any_matched)
+            return 0;
+    }
+
+    /* --all-tags filter (AND): every all_tag must appear in tags. */
+    if (g_test_config.all_tag_count > 0) {
+        for (int fi = 0; fi < g_test_config.all_tag_count; fi++) {
+            int found = 0;
+            for (const char *const *tp = tags; *tp != NULL; tp++) {
+                if (strcmp(*tp, g_test_config.all_tags[fi]) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found)
+                return 0; /* this required tag is absent */
+        }
+    }
+
+    return 1;
+}
+
+/**
  * unity_test_case_tag_filter_passes
  *
  * Returns 1 (run) when all active filters pass:
@@ -319,7 +366,9 @@ const unity_test_case_tags_t *unity_test_case_tag_registry_find(const char *grou
  */
 int unity_test_case_tag_filter_passes(const char *group, const char *name)
 {
-    /* Both filters inactive — every test runs. */
+    /* Both filters inactive — every test runs, even an untagged one. Must be
+     * checked here (not just inside unity_tag_list_matches_filters) so an
+     * untagged test isn't skipped below when no filter is active. */
     if (g_test_config.any_tag_count == 0 && g_test_config.all_tag_count == 0)
         return 1;
 
@@ -329,37 +378,7 @@ int unity_test_case_tag_filter_passes(const char *group, const char *name)
     if (!entry || !entry->tags)
         return 0;
 
-    /* --any-tags filter (OR): at least one any_tag must appear in the test. */
-    if (g_test_config.any_tag_count > 0) {
-        int any_matched = 0;
-        for (int fi = 0; fi < g_test_config.any_tag_count && !any_matched; fi++) {
-            for (const char *const *tp = entry->tags; *tp != NULL; tp++) {
-                if (strcmp(*tp, g_test_config.any_tags[fi]) == 0) {
-                    any_matched = 1;
-                    break;
-                }
-            }
-        }
-        if (!any_matched)
-            return 0;
-    }
-
-    /* --all-tags filter (AND): every all_tag must appear in the test. */
-    if (g_test_config.all_tag_count > 0) {
-        for (int fi = 0; fi < g_test_config.all_tag_count; fi++) {
-            int found = 0;
-            for (const char *const *tp = entry->tags; *tp != NULL; tp++) {
-                if (strcmp(*tp, g_test_config.all_tags[fi]) == 0) {
-                    found = 1;
-                    break;
-                }
-            }
-            if (!found)
-                return 0; /* this required tag is absent */
-        }
-    }
-
-    return 1;
+    return unity_tag_list_matches_filters(entry->tags);
 }
 
 /* Track whether the custom test runner is active. */

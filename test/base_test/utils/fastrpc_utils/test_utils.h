@@ -92,10 +92,18 @@ typedef enum {
  *
  *   Tags are compared case-sensitively (strcmp).
  *
+ *   The same any_tags[]/all_tags[] filters also select which --fuzz suite(s)
+ *   run (see the fuzz_suites[] registry in root_all_tests.c) — a fuzz suite
+ *   is just another taggable unit, matched with identical semantics.
+ *
  *   Recommended tag vocabulary:
  *     Functionality  — "Remote", "DspQueue", "RpcMem", "Profiling"
  *     Classification — "unit", "feature"
  *     Polarity       — "positive", "negative"
+ *
+ *   fuzz_mode    : Set by --fuzz. Dispatches to the fuzz suite registry in
+ *                 root_all_tests.c instead of Unity; skips DSP domain
+ *                 discovery entirely (fuzzing needs no live DSP session).
  */
 typedef struct {
     int domain_id;
@@ -103,6 +111,7 @@ typedef struct {
     int domain_count;
     int unsigned_pd;
     test_list_mode_t list_mode;
+    int fuzz_mode;                               /**< --fuzz; see root_all_tests.c              */
     const char *logs_spec;                      /**< --logs <spec>; NULL = registry defaults  */
     const char *any_tags[TEST_CONFIG_MAX_TAGS]; /**< --any-tags / --tags values (OR filter)   */
     int any_tag_count;                          /**< number of active --any-tags entries       */
