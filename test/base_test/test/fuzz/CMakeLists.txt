@@ -17,10 +17,16 @@
 #
 # For each suite in _fuzz_suites:
 #   1. Discovers all *.c files (fuzz_*.c) via file(GLOB CONFIGURE_DEPENDS).
-#   2. Builds a per-suite static library  fuzz_<name>_all.
+#   2. Embeds every test/fuzz/<suite>/corpus/<entry_point>/ dir as generated
+#      C byte arrays (see cmake/embed_corpus.cmake) so root_all_tests.c can
+#      self-seed a suite's default corpus directory on disk when it's absent
+#      — no separate `adb push` of the checked-in seed corpus required.
+#   3. Builds a per-suite static library  fuzz_<name>_all.
 #
 # Propagates ALL_FUZZ_SUITE_LIBS to the parent scope so bin/CMakeLists.txt can
 # link the fuzz suite libraries into test-fastrpc.
+
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/embed_corpus.cmake")
 
 # Suite names — add a new entry here when creating a new test/fuzz/<name>/ dir.
 # Named after the module under test (matches _unit_suites/_feat_suites), not
@@ -44,6 +50,20 @@ foreach(_suite IN LISTS _fuzz_suites)
         continue()
     endif()
 
+    # Embed each corpus/<entry_point>/ dir's seed files, one generated source
+    # per entry point (skip any with zero seed files — nothing to embed).
+    file(GLOB _corpus_dirs LIST_DIRECTORIES true "${_suite_dir}/corpus/*")
+    foreach(_corpus_dir IN LISTS _corpus_dirs)
+        if(IS_DIRECTORY "${_corpus_dir}")
+            file(GLOB _corpus_seed_files LIST_DIRECTORIES false "${_corpus_dir}/*")
+            if(_corpus_seed_files)
+                get_filename_component(_entry_point "${_corpus_dir}" NAME)
+                fastrpc_embed_corpus("${_entry_point}" "${_corpus_dir}" _embedded_corpus_src)
+                list(APPEND _suite_srcs "${_embedded_corpus_src}")
+            endif()
+        endif()
+    endforeach()
+
     add_library("fuzz_${_suite}_all" STATIC
         ${_suite_srcs}
     )
@@ -54,6 +74,7 @@ foreach(_suite IN LISTS _fuzz_suites)
 
     target_include_directories("fuzz_${_suite}_all" PRIVATE
         "${_suite_dir}"
+        "${CMAKE_SOURCE_DIR}/test/fuzz"
     )
 
     target_link_libraries("fuzz_${_suite}_all" PRIVATE

@@ -48,15 +48,27 @@ each against its own checked-in corpus, unless you narrow or override it:
 
 ```sh
 adb push builddir/bin/test-fastrpc /data/local/tmp/
-adb push test/fuzz/dspqueue/corpus /data/local/tmp/corpus
 adb shell 'cd /data/local/tmp && ./test-fastrpc --fuzz -max_len=32'
 ```
 
-The default corpus path (`corpus/dspqueue_create`, from this suite's entry in
-the `fuzz_suites[]` registry in `root_all_tests.c`) is resolved relative to
-the *current working directory at run time* — `cd` to wherever the whole
-`corpus/` tree was pushed, as above, so it lines up with the pushed
-`corpus/dspqueue_create/` subdir.
+The seed files under `corpus/dspqueue_create/` are embedded into the binary
+at build time (see `test/fuzz/cmake/embed_corpus.cmake`) — if the default
+corpus dir (`corpus/dspqueue_create`, resolved relative to the *current
+working directory at run time*) doesn't already exist, `root_all_tests.c`
+writes those embedded seeds out to it before handing the path to libFuzzer,
+so pushing `test/fuzz/dspqueue/corpus/` separately is no longer required to
+get started. This only covers the small checked-in seed set, though — once
+you're running real coverage-guided sessions and want libFuzzer to keep
+growing the corpus across runs, `adb push`/`adb pull` a real corpus
+directory as usual; the auto-materialization step only fires when the
+directory is missing, and never touches one that already exists.
+
+Once the run finishes, `root_all_tests.c` removes the corpus directory again
+if (and only if) this same process is the one that auto-materialized it —
+so a device that never had `corpus/dspqueue_create/` pushed to it is left
+exactly as it started, instead of accumulating a growing corpus (including
+any new coverage-increasing inputs libFuzzer found) run over run. A corpus
+directory you pushed or pointed at explicitly is never touched or removed.
 
 Narrow to one suite by its registered tag — the same `--tags`/`--any-tags`/
 `--all-tags` flags used to filter Unity test cases (see `test_utils.h`) also

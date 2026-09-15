@@ -56,17 +56,33 @@ int fuzz_dspqueue_create_run(const uint8_t *data, size_t size);
 extern int LLVMFuzzerRunDriver(int *argc, char ***argv,
                                 int (*UserCb)(const uint8_t *Data, size_t Size));
 
+/* Build-time-embedded seed corpora — see test/fuzz/fuzz_embedded_corpus.h and
+ * test/fuzz/cmake/embed_corpus.cmake. Used to self-seed a suite's default
+ * corpus directory on disk when it's missing (see
+ * ensure_default_corpus_materialized() below). */
+#include "test/fuzz/fuzz_embedded_corpus.h"
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
+#include <sanitizer/common_interface_defs.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+extern const struct fuzz_embedded_corpus fuzz_embedded_corpus_dspqueue_create;
+
 struct fuzz_suite {
     const char *name;            /* selects this suite via --tags/--any-tags/--all-tags */
     const char *const *tags;     /* NULL-terminated; matched like TEST_CASE_TAGS() */
     const char *default_corpus;  /* used when argv has no positional corpus path; relative to CWD */
     int (*run)(const uint8_t *data, size_t size);
+    const struct fuzz_embedded_corpus *embedded_corpus; /* NULL if this suite has no embedded seeds */
 };
 
 static const char *const dspqueue_create_tags[] = { "dspqueue_create", "dspqueue", NULL };
 
 static const struct fuzz_suite fuzz_suites[] = {
-    { "dspqueue_create", dspqueue_create_tags, "corpus/dspqueue_create", fuzz_dspqueue_create_run },
+    { "dspqueue_create", dspqueue_create_tags, "corpus/dspqueue_create", fuzz_dspqueue_create_run,
+      &fuzz_embedded_corpus_dspqueue_create },
 };
 #define FUZZ_SUITE_COUNT ((int)(sizeof(fuzz_suites) / sizeof(fuzz_suites[0])))
 
@@ -165,27 +181,175 @@ static const char *fuzz_argv_corpus_path(int argc, const char *argv[])
 }
 
 /*
+ * Recursively creates a directory (like `mkdir -p`), given a relative or
+ * absolute path. Intermediate components that already exist are fine.
+ */
+static int mkdir_recursive(const char *path)
+{
+    char buf[PATH_MAX];
+    size_t len = strlen(path);
+
+    if (len == 0 || len >= sizeof(buf))
+        return -1;
+    strcpy(buf, path);
+
+    for (char *p = buf + 1; *p != '\0'; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(buf, 0755) != 0 && errno != EEXIST)
+                return -1;
+            *p = '/';
+        }
+    }
+
+    return (mkdir(buf, 0755) == 0 || errno == EEXIST) ? 0 : -1;
+}
+
+/*
+ * If suite->default_corpus doesn't already exist on disk, creates it and
+ * writes out every one of the suite's embedded seed files into it — so a
+ * fresh device only needs the binary pushed, not a separate `adb push` of
+ * test/fuzz/<suite>/corpus/. Only touches the default corpus path; an explicit
+ * corpus path given on the command line is left entirely alone.
+ *
+ * *out_materialized is set to true only when this call is the one that
+ * created the directory (so the caller knows it's safe to remove once the
+ * run is done — a pre-existing or explicitly-provided corpus is never ours
+ * to delete).
+ */
+static int ensure_default_corpus_materialized(const struct fuzz_suite *suite, bool *out_materialized)
+{
+    struct stat st;
+
+    *out_materialized = false;
+
+    if (stat(suite->default_corpus, &st) == 0 && S_ISDIR(st.st_mode))
+        return 0;
+
+    if (!suite->embedded_corpus || suite->embedded_corpus->seed_count == 0)
+        return 0; /* nothing to materialize — fall through to libFuzzer's own error */
+
+    if (mkdir_recursive(suite->default_corpus) != 0) {
+        fprintf(stderr, "[fuzz] failed to create default corpus dir '%s': %s\n",
+                suite->default_corpus, strerror(errno));
+        return -1;
+    }
+
+    for (size_t i = 0; i < suite->embedded_corpus->seed_count; i++) {
+        const struct fuzz_embedded_seed *seed = &suite->embedded_corpus->seeds[i];
+        char path[PATH_MAX];
+
+        snprintf(path, sizeof(path), "%s/%s", suite->default_corpus, seed->name);
+
+        FILE *f = fopen(path, "wb");
+        if (!f) {
+            fprintf(stderr, "[fuzz] failed to write embedded seed '%s': %s\n",
+                    path, strerror(errno));
+            return -1;
+        }
+        fwrite(seed->data, 1, seed->size, f);
+        fclose(f);
+    }
+
+    printf("[fuzz] materialized %zu embedded seed(s) into '%s'\n",
+           suite->embedded_corpus->seed_count, suite->default_corpus);
+    *out_materialized = true;
+    return 0;
+}
+
+/*
+ * Recursively removes a directory tree (like `rm -rf`). Used to clean up a
+ * corpus directory this process itself auto-materialized from embedded
+ * seeds — libFuzzer may have added new coverage-increasing inputs to it
+ * during the run, but since it only ever exists as a throwaway convenience
+ * (the real seeds still live in the binary), it's discarded rather than
+ * left behind on the device.
+ */
+static void remove_directory_recursive(const char *path)
+{
+    DIR *dir = opendir(path);
+    struct dirent *entry;
+    char child[PATH_MAX];
+
+    if (!dir)
+        return;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
+
+        struct stat st;
+        if (lstat(child, &st) != 0)
+            continue;
+
+        if (S_ISDIR(st.st_mode))
+            remove_directory_recursive(child);
+        else
+            unlink(child);
+    }
+    closedir(dir);
+    rmdir(path);
+}
+
+/*
  * Runs one suite. argv/argc must already exclude --fuzz and any tag flags
  * (test_config_init() strips those before this is ever called). Appends
  * suite->default_corpus when argv has no positional corpus path of its own.
  */
+
+/* Path to clean up if a sanitizer-detected error terminates the process
+ * mid-run (see death_cleanup_corpus() below) — NULL whenever no
+ * auto-materialized corpus is currently in flight. */
+static const char *g_death_cleanup_corpus_path = NULL;
+
+/*
+ * Registered with __sanitizer_set_death_callback(): ASan/UBSan call this
+ * immediately before terminating the process on a detected error (abort()
+ * itself never runs atexit handlers, so that mechanism can't be used here).
+ * Runs the same cleanup a normal completion would, for whichever corpus this
+ * process itself auto-materialized.
+ */
+static void death_cleanup_corpus(void)
+{
+    if (g_death_cleanup_corpus_path)
+        remove_directory_recursive(g_death_cleanup_corpus_path);
+}
+
 static int run_one_fuzz_suite(const struct fuzz_suite *suite, int argc, const char *argv[])
 {
     const char *corpus = fuzz_argv_corpus_path(argc, argv);
+    bool materialized = false;
     int fuzz_argc = 0;
     char *fuzz_argv[argc + 1];
 
     for (int i = 0; i < argc; i++)
         fuzz_argv[fuzz_argc++] = (char *)argv[i];
     if (!corpus) {
+        if (ensure_default_corpus_materialized(suite, &materialized) != 0)
+            return 1;
         corpus = suite->default_corpus;
         fuzz_argv[fuzz_argc++] = (char *)corpus;
+    }
+
+    if (materialized) {
+        g_death_cleanup_corpus_path = corpus;
+        __sanitizer_set_death_callback(death_cleanup_corpus);
     }
 
     printf("[fuzz] running suite '%s' (corpus: %s)\n", suite->name, corpus);
 
     char **fuzz_argv_ptr = fuzz_argv;
-    return LLVMFuzzerRunDriver(&fuzz_argc, &fuzz_argv_ptr, suite->run);
+    int result = LLVMFuzzerRunDriver(&fuzz_argc, &fuzz_argv_ptr, suite->run);
+
+    if (materialized) {
+        g_death_cleanup_corpus_path = NULL;
+        remove_directory_recursive(corpus);
+        printf("[fuzz] removed auto-materialized corpus dir '%s'\n", corpus);
+    }
+
+    return result;
 }
 
 /*
