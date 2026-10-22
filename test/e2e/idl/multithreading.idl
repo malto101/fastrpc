@@ -1,0 +1,8 @@
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+interface multithreading : remote_handle64 {
+    AEEResult parallel_sum();
+    AEEResult barriers();
+    AEEResult mutexes();
+};
