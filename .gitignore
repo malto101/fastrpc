@@ -18,6 +18,9 @@ test-driver
 **/build
 
 # build time artifacts
+build-test/
+stage-test/
+
 Makefile
 config.h
 config.log

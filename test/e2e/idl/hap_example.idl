@@ -2,5 +2,5 @@
 #include "remote.idl"
 
 interface hap_example : remote_handle64 {
-    AEEResult farf_runtime(in long runtime_logging_enable);
+    long farf_runtime(in long runtime_logging_enable);
 };

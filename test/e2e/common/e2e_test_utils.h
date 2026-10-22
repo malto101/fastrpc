@@ -5,6 +5,7 @@
 #define FASTRPC_E2E_TEST_UTILS_H
 
 #include "remote.h"
+#include "test_utils.h"
 #include <stdbool.h>
 #include <stddef.h>
 

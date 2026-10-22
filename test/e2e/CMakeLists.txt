@@ -75,16 +75,15 @@ foreach(_name IN LISTS _e2e_names)
     # Preserve the legacy dynamically loaded module ABI for each example.
     add_library("${_name}" MODULE
         "${CMAKE_CURRENT_SOURCE_DIR}/${_name}/${_name}_legacy.c"
-        "${CMAKE_CURRENT_SOURCE_DIR}/${_name}/${_name}_imp.c"
         "${_e2e_gen_root}/${_name}/${_name}_stub.c")
     target_include_directories("${_name}" PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/${_name}"
         "${CMAKE_CURRENT_SOURCE_DIR}/common"
         "${_e2e_gen_root}/${_name}")
-    target_link_libraries("${_name}" PRIVATE common_test_dep)
+    target_link_libraries("${_name}" PRIVATE common_test_dep e2e_common)
     set_target_properties("${_name}" PROPERTIES
         OUTPUT_NAME "${_name}"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/e2e/linux")
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/e2e/${TARGET_PLATFORM}")
     install(TARGETS "${_name}"
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/fastrpc_test")
 endforeach()
@@ -109,49 +108,55 @@ if(E2E_HEXAGON_CLANG AND E2E_HEXAGON_LD AND NOT HEXAGON_SDK_ROOT STREQUAL "")
     set(_e2e_dsp_dir "${CMAKE_BINARY_DIR}/e2e")
     set(_e2e_sdk_inc "${HEXAGON_SDK_ROOT}/incs")
     set(_e2e_dsp_targets)
-    foreach(_name IN LISTS _e2e_names)
-        set(_gen_dir "${_e2e_gen_root}/${_name}")
-        set(_skel_obj "${_e2e_dsp_dir}/${_name}_skel.o")
-        set(_imp_obj "${_e2e_dsp_dir}/${_name}_imp.o")
-        set(_so "${_e2e_dsp_dir}/lib${_name}_skel.so")
-        set(_imp "${CMAKE_CURRENT_SOURCE_DIR}/${_name}/${_name}_imp.c")
-        set(_dsp_flags --target=hexagon -mv${DSP_ARCH} -fPIC -Wall -Werror
-            -std=c11 -D_POSIX_C_SOURCE=200112L
-            -I${_gen_dir} -I${FASTRPC_INC_DIR} -I${_e2e_sdk_inc})
-        if(_name STREQUAL "multithreading")
-            list(APPEND _dsp_flags "-I${_e2e_sdk_inc}/qurt")
-        endif()
+    foreach(_arch IN LISTS DSP_ARCHES)
+        foreach(_name IN LISTS _e2e_names)
+            set(_gen_dir "${_e2e_gen_root}/${_name}")
+            set(_arch_dir "${_e2e_dsp_dir}/v${_arch}")
+            set(_skel_obj "${_arch_dir}/${_name}_skel.o")
+            set(_imp_obj "${_arch_dir}/${_name}_imp.o")
+            set(_so "${_arch_dir}/lib${_name}_skel.so")
+            set(_imp "${CMAKE_CURRENT_SOURCE_DIR}/${_name}/${_name}_imp.c")
+            set(_dsp_flags --target=hexagon -mv${_arch} -fPIC -Wall -Werror
+                -std=c11 -D_POSIX_C_SOURCE=200112L
+                -I${_gen_dir} -I${FASTRPC_INC_DIR} -I${_e2e_sdk_inc})
+            if(_name STREQUAL "multithreading")
+                list(APPEND _dsp_flags "-I${_e2e_sdk_inc}/qurt")
+            endif()
 
-        add_custom_command(
-            OUTPUT "${_skel_obj}"
-            COMMAND "${CMAKE_COMMAND}" -E make_directory "${_e2e_dsp_dir}"
-            COMMAND "${E2E_HEXAGON_CLANG}" ${_dsp_flags}
-                    -c "${_gen_dir}/${_name}_skel.c" -o "${_skel_obj}"
-            DEPENDS fastrpc_e2e_idl "${_gen_dir}/${_name}_skel.c"
-            COMMENT "Compiling ${_name} DSP skeleton"
-            VERBATIM)
-        add_custom_command(
-            OUTPUT "${_imp_obj}"
-            COMMAND "${CMAKE_COMMAND}" -E make_directory "${_e2e_dsp_dir}"
-            COMMAND "${E2E_HEXAGON_CLANG}" ${_dsp_flags}
-                    -c "${_imp}" -o "${_imp_obj}"
-            DEPENDS "${_imp}" "${_gen_dir}/${_name}.h"
-            COMMENT "Compiling ${_name} DSP implementation"
-            VERBATIM)
-        add_custom_command(
-            OUTPUT "${_so}"
-            COMMAND "${E2E_HEXAGON_LD}" -shared
-                    -soname=lib${_name}_skel.so -z separate-loadable-segments
-                    "${_skel_obj}" "${_imp_obj}" -o "${_so}"
-            DEPENDS "${_skel_obj}" "${_imp_obj}"
-            COMMENT "Linking lib${_name}_skel.so"
-            VERBATIM)
-        add_custom_target("fastrpc_e2e_${_name}_skel" ALL DEPENDS "${_so}")
-        add_dependencies("fastrpc_e2e_${_name}_skel" fastrpc_e2e_idl)
-        list(APPEND _e2e_dsp_targets "fastrpc_e2e_${_name}_skel")
+            add_custom_command(
+                OUTPUT "${_skel_obj}"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory "${_arch_dir}"
+                COMMAND "${E2E_HEXAGON_CLANG}" ${_dsp_flags}
+                        -c "${_gen_dir}/${_name}_skel.c" -o "${_skel_obj}"
+                DEPENDS fastrpc_e2e_idl "${_gen_dir}/${_name}_skel.c"
+                COMMENT "Compiling ${_name} DSP skeleton for v${_arch}"
+                VERBATIM)
+            add_custom_command(
+                OUTPUT "${_imp_obj}"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory "${_arch_dir}"
+                COMMAND "${E2E_HEXAGON_CLANG}" ${_dsp_flags}
+                        -c "${_imp}" -o "${_imp_obj}"
+                DEPENDS "${_imp}" "${_gen_dir}/${_name}.h"
+                COMMENT "Compiling ${_name} DSP implementation for v${_arch}"
+                VERBATIM)
+            add_custom_command(
+                OUTPUT "${_so}"
+                COMMAND "${E2E_HEXAGON_LD}" -shared
+                        -soname=lib${_name}_skel.so -z separate-loadable-segments
+                        "${_skel_obj}" "${_imp_obj}" -o "${_so}"
+                DEPENDS "${_skel_obj}" "${_imp_obj}"
+                COMMENT "Linking lib${_name}_skel.so for v${_arch}"
+                VERBATIM)
+            set(_skel_target "fastrpc_e2e_${_name}_skel_v${_arch}")
+            add_custom_target("${_skel_target}" ALL DEPENDS "${_so}")
+            add_dependencies("${_skel_target}" fastrpc_e2e_idl)
+            install(FILES "${_so}"
+                DESTINATION "${CMAKE_INSTALL_DATADIR}/fastrpc_test/v${_arch}")
+            list(APPEND _e2e_dsp_targets "${_skel_target}")
+        endforeach()
     endforeach()
     add_custom_target(fastrpc_e2e_skels DEPENDS ${_e2e_dsp_targets})
-    message(STATUS "e2e DSP skeletons enabled (SDK: ${HEXAGON_SDK_ROOT})")
+    message(STATUS "e2e DSP skeletons enabled for ${DSP_ARCHES} (SDK: ${HEXAGON_SDK_ROOT})")
 else()
     message(STATUS "e2e DSP skeletons disabled; set HEXAGON_SDK_ROOT and provide clang/ld.lld")
 endif()

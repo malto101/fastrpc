@@ -91,7 +91,19 @@ if(FASTRPC_INCLUDE_DIR STREQUAL "" OR
         "FastRPC headers were not found. Set FASTRPC_ROOT, "
         "FASTRPC_PREFIX, or FASTRPC_INCLUDE_DIR.")
 endif()
-set(FASTRPC_INC_DIR "${FASTRPC_INCLUDE_DIR}")
+if(EXISTS "${FASTRPC_ROOT}/inc")
+    # The test sources use a few internal headers that make install does not
+    # publish. Keep the installed include directory available through the
+    # imported target, while compiling test sources against the checkout's
+    # complete header set.
+    set(FASTRPC_INC_DIR "${FASTRPC_ROOT}/inc")
+else()
+    set(FASTRPC_INC_DIR "${FASTRPC_INCLUDE_DIR}")
+endif()
+set(_fastrpc_include_dirs "${FASTRPC_INCLUDE_DIR}")
+if(NOT "${FASTRPC_INC_DIR}" STREQUAL "${FASTRPC_INCLUDE_DIR}")
+    list(APPEND _fastrpc_include_dirs "${FASTRPC_INC_DIR}")
+endif()
 
 if(FASTRPC_IDL_DIR STREQUAL "")
     if(EXISTS "${FASTRPC_ROOT}/idl/AEEStdDef.idl")

@@ -19,7 +19,7 @@
  *
  * To add a new e2e suite:
  *   1. Create test/e2e/<name>/ with all_tests.c and test_*.c files.
- *   2. Define void run_<name>_tests(void) and register the suite in e2e/CMakeLists.txt.
+ *   2. Define void run_<name>_e2e_tests(void) and register the suite in e2e/CMakeLists.txt.
  *   3. Add the extern declaration and call in run_all_tests() below.
  */
 
@@ -38,9 +38,9 @@ void run_dspqueue_tests(void);
 void run_dspqueue_feature_tests(void);
 
 /* ---- End-to-end suite declarations -------------------------------------- */
-void run_calculator_tests(void);
-void run_hap_example_tests(void);
-void run_multithreading_tests(void);
+void run_calculator_e2e_tests(void);
+void run_hap_example_e2e_tests(void);
+void run_multithreading_e2e_tests(void);
 
 /* ---- Root dispatcher ---------------------------------------------------- */
 
@@ -53,9 +53,9 @@ static void run_all_tests(void)
     run_dspqueue_feature_tests();
 
     /* End-to-end suites */
-    run_calculator_tests();
-    run_hap_example_tests();
-    run_multithreading_tests();
+    run_calculator_e2e_tests();
+    run_hap_example_e2e_tests();
+    run_multithreading_e2e_tests();
 }
 
 static int run_base_tests(int argc, const char *argv[])

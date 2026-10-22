@@ -2,7 +2,7 @@
 #include "remote.idl"
 
 interface multithreading : remote_handle64 {
-    AEEResult parallel_sum();
-    AEEResult barriers();
-    AEEResult mutexes();
+    long parallel_sum();
+    long barriers();
+    long mutexes();
 };
