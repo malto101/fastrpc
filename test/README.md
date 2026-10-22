@@ -1,67 +1,86 @@
-# fastrpc_test
+# FastRPC tests
 
-This folder contains a test application (`fastrpc_test.c`) that demonstrates the usage of FastRPC (Fast Remote Procedure Call) to offload computations to different DSP (Digital Signal Processor) domains. The test application supports multiple examples, including a simple calculator service, a HAP example, and a multithreading example.
+`test/` is the canonical CMake/Unity test tree. It contains `unit/`,
+`feature/`, and `e2e/` suites, while the legacy Autotools launcher and its
+plugin install contract remain available through `Makefile.am`.
 
-## Pushing Files to the Device
+## CMake build
 
-After building the application, the following files and directories need to be pushed to the device:
+Initialize the Unity submodule, build FastRPC, and configure from this
+directory:
 
-1. **fastrpc_test Binary**: The compiled test application.
-2. **android Directory**: Contains shared libraries for the Android platform.
-3. **linux Directory**: Contains shared libraries for the Linux platform.
-4. **v68 Directory**: Contains skeletons for the v68 architecture version.
-5. **v75 Directory**: Contains skeletons for the v75 architecture version.
-6. **Base-test plugin (optional)**: `base_test` can install
-   `libbase_test.so` into the same plugin directory so its Unity suites are
-   discovered by this runner.
-
-### Installing the Test
-
-Use `make install` to install the libraries and the executable to the appropriate directories:
-
-```bash
-make install
-```
-
-To add the CMake-based `base_test` suites to the installed runner, build them
-and install with the same prefix:
-
-```bash
-cmake -S base_test -B base_test/builddir \
-  -DFASTRPC_ROOT=.. \
+```sh
+git submodule update --init
+./gitcompile --host=aarch64-linux-gnu
+cmake -S test -B build-test -G Ninja \
+  -DFASTRPC_ROOT="$PWD" \
   -DQAIC_EXECUTABLE=/path/to/qaic
-cmake --build base_test/builddir --target base_test
-cmake --install base_test/builddir --prefix /usr/local
+cmake --build build-test
 ```
 
-This installs `libbase_test.so` under
-`/usr/local/lib/fastrpc_test/`. The existing `fastrpc_test` `dlopen()` loop
-loads it and invokes its `run_test()` entry point like the other test modules.
+The modern runner is `build-test/bin/test-fastrpc`; it intentionally does not
+replace the Autotools `fastrpc_test` executable. Metadata can be listed without
+a DSP device:
 
-## Running the Test
+```sh
+build-test/bin/test-fastrpc --list-tests
+build-test/bin/test-fastrpc --list-groups
+build-test/bin/test-fastrpc --list-tags
+ctest --test-dir build-test -N
+```
 
-To run the test application, use the following command:
+The default CMake project builds the base unit/feature plugin and registers the
+three end-to-end suites under `test/e2e/`:
 
-```bash
+- `calculator`: sum/max and session behavior;
+- `multithreading`: active parallel-sum and safe QuRT synchronization paths;
+- `hap_example`: only repository-defined HAP interfaces and QuRT-based APIs.
+
+External HAP compute-resource, memory, performance, power, cache-lock, and VTCM
+interfaces are deliberately not part of this test tree. Unsupported legacy
+selectors are reported as `AEE_EUNSUPPORTED` skips.
+
+## Installed FastRPC prefix
+
+After installing FastRPC into a prefix or staging directory, CMake can consume
+the installed headers and library rather than requiring `src/.libs`:
+
+```sh
+make install DESTDIR="$PWD/stage"
+cmake -S test -B build-installed -G Ninja \
+  -DFASTRPC_PREFIX="$PWD/stage/usr/local" \
+  -DFASTRPC_IDL_DIR="$PWD/idl" \
+  -DQAIC_EXECUTABLE=/path/to/qaic
+cmake --build build-installed
+```
+
+Use `FASTRPC_INCLUDE_DIR` or `FASTRPC_LIBRARY` for nonstandard `--includedir`
+or `--libdir` layouts. `FASTRPC_IDL_DIR` is needed when the installed package
+does not include QAIC input IDLs.
+
+## Compatibility install layout
+
+The legacy launcher remains `${prefix}/bin/fastrpc_test` and continues to
+accept `-d`, `-U`, `-t`, and `-a`. It scans `${libdir}/fastrpc_test` for
+modules exporting:
+
+```c
+int run_test(int domain_id, bool is_unsignedpd_enabled);
+```
+
+CMake installs the modern runner as `${bindir}/test-fastrpc`, the base plugin
+as `${libdir}/fastrpc_test/libbase_test.so`, and source-built e2e modules with
+the established names. DSP skeletons remain under
+`${datadir}/fastrpc_test/v68` and `v75` when the Hexagon toolchain is available.
+The existing checked-in artifacts remain available to the Autotools packaging
+flow until replacement binaries have been validated on hardware.
+
+Run the legacy launcher as before:
+
+```sh
 fastrpc_test -d 3 -U 1 -t linux -a v68
 ```
 
-### Options
-
-- `-d domain`: Run on a specific domain.
-  - `0`: Run the example on ADSP
-  - `1`: Run the example on MDSP
-  - `2`: Run the example on SDSP
-  - `3`: Run the example on CDSP
-  - **Default Value**: `3` (CDSP) for targets having CDSP.
-
-- `-U unsigned_PD`: Run on signed or unsigned PD.
-  - `0`: Run on signed PD.
-  - `1`: Run on unsigned PD.
-  - **Default Value**: `1`
-
-- `-t target`: Specify the target platform (android or linux).
-  - **Default Value**: `linux`
-
-- `-a arch_version`: Specify the architecture version (e.g., v68, v75).
-  - **Default Value**: `v68`
+Host execution and the Unity metadata commands do not emulate DSP behavior;
+calculator, multithreading, and supported HAP/QuRT e2e cases require a
+cross-compiled AArch64 target and compatible DSP skeletons.

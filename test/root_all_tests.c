@@ -16,6 +16,11 @@
  *      void run_<name>_feature_tests(void).
  *   2. Add the extern declaration and call in run_all_tests() below.
  *   3. Add the suite name to _feat_suites in test/feature/CMakeLists.txt.
+ *
+ * To add a new e2e suite:
+ *   1. Create test/e2e/<name>/ with all_tests.c and test_*.c files.
+ *   2. Define void run_<name>_tests(void) and register the suite in e2e/CMakeLists.txt.
+ *   3. Add the extern declaration and call in run_all_tests() below.
  */
 
 #include "reporting/unity/unity_fixture_file_output.h"
@@ -32,6 +37,11 @@ void run_dspqueue_tests(void);
 /* ---- Feature suite declarations ----------------------------------------- */
 void run_dspqueue_feature_tests(void);
 
+/* ---- End-to-end suite declarations -------------------------------------- */
+void run_calculator_tests(void);
+void run_hap_example_tests(void);
+void run_multithreading_tests(void);
+
 /* ---- Root dispatcher ---------------------------------------------------- */
 
 static void run_all_tests(void)
@@ -41,6 +51,11 @@ static void run_all_tests(void)
 
     /* Feature suites */
     run_dspqueue_feature_tests();
+
+    /* End-to-end suites */
+    run_calculator_tests();
+    run_hap_example_tests();
+    run_multithreading_tests();
 }
 
 static int run_base_tests(int argc, const char *argv[])
