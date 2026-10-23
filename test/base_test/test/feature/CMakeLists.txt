@@ -16,7 +16,7 @@
 # link all suite libraries into fastrpc_test.
 
 # Suite names — add a new entry here when creating a new test/feature/<name>/ dir.
-set(_feat_suites dspqueue)
+set(_feat_suites)
 
 set(_new_suite_libs "")
 

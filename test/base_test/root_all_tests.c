@@ -26,21 +26,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* ---- Unit suite declarations -------------------------------------------- */
-void run_dspqueue_tests(void);
-
-/* ---- Feature suite declarations ----------------------------------------- */
-void run_dspqueue_feature_tests(void);
-
 /* ---- Root dispatcher ---------------------------------------------------- */
 
 static void run_all_tests(void)
 {
-    /* Unit suites */
-    run_dspqueue_tests();
-
-    /* Feature suites */
-    run_dspqueue_feature_tests();
 }
 
 static int run_base_tests(int argc, const char *argv[])

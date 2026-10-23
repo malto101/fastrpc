@@ -3,10 +3,10 @@
 
 /**
  * @file unity_fixture_file_output.h
- * @brief Unity Fixture integration for formatted output, filtering, and logs
+ * @brief Unity Fixture integration for formatted output and filtering
  *
  * This module extends Unity Fixture with formatted console output, tag-based
- * filtering, error-code summaries, and per-test log capture.
+ * filtering, and error-code summaries.
  *
  * Usage:
  *   1. Include this header after unity_fixture.h
@@ -35,9 +35,9 @@ extern "C" {
 /**
  * @brief Initialize the custom Unity Fixture output
  *
- * Call this before UnityMain() to enable formatted output and log capture.
+ * Call this before UnityMain() to enable formatted output.
  *
- * @param output_dir Log output directory (NULL = default)
+ * @param output_dir Reserved; pass NULL
  * @param base_name Reserved; pass NULL
  * @return 0
  */
@@ -46,14 +46,14 @@ int UnityFixtureFileOutputBegin(const char *output_dir, const char *base_name);
 /**
  * @brief Finalize the custom Unity Fixture output
  *
- * Call this after UnityMain() to stop log capture and print the summary.
+ * Call this after UnityMain() to print the summary.
  *
  * @return 0
  */
 int UnityFixtureFileOutputEnd(void);
 
 /**
- * @brief Custom test runner with formatted output, filtering, and logs
+ * @brief Custom test runner with formatted output and filtering
  *
  * Drop-in replacement for UnityTestRunner.
  */
@@ -118,7 +118,6 @@ int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(
  *
  *   Functionality  — which subsystem / API is under test
  *                    "Remote"    remote_handle_* and remote_session_control
- *                    "DspQueue"  dspqueue_* APIs
  *                    "RpcMem"    rpcmem_* APIs
  *                    "Profiling" RPC performance measurement tests
  *
@@ -134,7 +133,7 @@ int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(
  *   API name       — the specific function under test (enables per-API
  *                    filtering with --any-tags <api_name>)
  *                    e.g. "remote_handle_open", "remote_handle64_open",
- *                         "fastrpc_mmap", "dspqueue_create", "rpcmem_alloc"
+ *                         "fastrpc_mmap", "rpcmem_alloc"
  *                    When a test file covers multiple API variants (e.g.
  *                    32-bit and 64-bit), each test case carries the tag
  *                    of the specific function it exercises.

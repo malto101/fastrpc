@@ -55,20 +55,6 @@ typedef enum {
  *   list_mode   : Metadata-only listing requested by -l or --list-*. When
  *                 active, DSP discovery and test execution are skipped.
  *
- *   logs_spec   : Comma-separated list of log source names to enable, or one
- *                 of the special tokens below.  Populated by --logs <spec>.
- *
- *                   NULL / ""            use each source's enabled_by_default
- *                                        setting from the registry (default)
- *                   "none"               disable all log sources
- *                   "all"                enable every registered source
- *                   "journalctl"         enable only journalctl
- *                   "journalctl,dmesg"   enable exactly these two sources
- *
- *                 Applied by UnityFixtureFileOutputBegin() after
- *                 log_capture_init().  Use log_capture_list_sources() to
- *                 print the full list of available source names.
- *
  *   any_tags[]   : OR-mode inclusion filter.  Populated by --any-tags <tag>
  *                 (repeatable, up to TEST_CONFIG_MAX_TAGS values).
  *                 Also populated by --tags <tag> (backward-compatible alias).
@@ -93,7 +79,7 @@ typedef enum {
  *   Tags are compared case-sensitively (strcmp).
  *
  *   Recommended tag vocabulary:
- *     Functionality  — "Remote", "DspQueue", "RpcMem", "Profiling"
+ *     Functionality  — "Remote", "RpcMem", "Profiling"
  *     Classification — "unit", "feature"
  *     Polarity       — "positive", "negative"
  */
@@ -104,7 +90,6 @@ typedef struct {
     int unsigned_pd;
     int silent_mode; /**< --silent; suppress per-test output for passing tests */
     test_list_mode_t list_mode;
-    const char *logs_spec;                      /**< --logs <spec>; NULL = registry defaults  */
     const char *any_tags[TEST_CONFIG_MAX_TAGS]; /**< --any-tags / --tags values (OR filter)   */
     int any_tag_count;                          /**< number of active --any-tags entries       */
     const char *all_tags[TEST_CONFIG_MAX_TAGS]; /**< --all-tags values (AND filter)            */
