@@ -48,9 +48,17 @@ test/base_test/
 │   └── reporting/
 │       └── unity/                  # Unity fixture output hooks
 │
-├── test/                           # unit and feature suites
+├── test/                           # unit, feature, and E2E suites
 │   ├── feature/                    # feature-suite sources
-│   └── unit/                       # unit-suite sources
+│   ├── unit/                       # unit-suite sources
+│   └── e2e/                        # calculator, HAP, and multithreading samples
+│       ├── idl/                    # independent QAIC interfaces
+│       ├── common/                 # shared URI/session helpers
+│       └── <sample>/               # Unity tests and DSP implementations
+
+The E2E interfaces are intentionally separate from `idl/fastrpc_test.idl`.
+This keeps the sample ABI and DSP dependencies independent of the generic
+base-test skeleton.
 │
 ├── bin/
 │   └── CMakeLists.txt              # builds host binary, plugin, and DSP skel
@@ -160,8 +168,19 @@ cmake --build builddir
 | `FASTRPC_ROOT` | auto-detected | Path to the fastrpc repository root |
 | `QAIC_EXECUTABLE` | — | Path to the QAIC compiler (required) |
 | `ANDROID_NDK_HOME` | — | Path to the Android NDK root (android only) |
-| `DSP_ARCH` | `73` | Hexagon DSP architecture version (e.g. `68`, `73`, `75`) |
+| `DSP_ARCH` | `73` | Generic base-test DSP architecture (e.g. `68`, `73`, `75`) |
+| `DSP_ARCHES` | `68;75` | E2E DSP skeleton architectures |
+| `HEXAGON_SDK_ROOT` | — | Hexagon SDK root; enables E2E DSP skeleton builds |
+| `E2E_HEXAGON_CLANG` | — | Explicit Hexagon clang executable for E2E skeletons |
+| `E2E_HEXAGON_LD` | — | Explicit Hexagon linker (`ld.lld`) for E2E skeletons |
 | `CMAKE_BUILD_TYPE` | `RelWithDebInfo` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
+
+When `HEXAGON_SDK_ROOT`, `E2E_HEXAGON_CLANG`, and `E2E_HEXAGON_LD` are not
+provided, the host test binary still builds but E2E DSP skeletons are skipped.
+Deploy the corresponding `libcalculator_skel.so`, `libhap_example_skel.so`, and
+`libmultithreading_skel.so` from the enabled `v<arch>` directories before
+running those cases on hardware. HAP and multithreading additionally require
+the SDK HAP and QuRT headers supplied by the target SDK.
 
 `FASTRPC_ROOT` is auto-detected as `../..` relative to this directory when not
 set explicitly, which is correct when `base_test` lives at
@@ -269,6 +288,9 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/fastrpc_test"
 
 # Suppress output for passing tests — only failures and skips are shown
 ./bin/fastrpc_test --silent
+
+# E2E tests only (all E2E cases carry the `e2e` tag)
+./bin/fastrpc_test --all-tags e2e -d 3
 ```
 
 Listing commands print one sorted entry per line. Existing group, test-name,

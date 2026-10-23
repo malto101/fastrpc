@@ -28,8 +28,15 @@
 
 /* ---- Root dispatcher ---------------------------------------------------- */
 
+void run_calculator_e2e_tests(void);
+void run_hap_example_e2e_tests(void);
+void run_multithreading_e2e_tests(void);
+
 static void run_all_tests(void)
 {
+    run_calculator_e2e_tests();
+    run_hap_example_e2e_tests();
+    run_multithreading_e2e_tests();
 }
 
 static int run_base_tests(int argc, const char *argv[])

@@ -287,6 +287,7 @@ set(ALL_SUITE_LIBS "")
 
 add_subdirectory(test/unit)
 add_subdirectory(test/feature)
+add_subdirectory(test/e2e)
 
 # ============================================================================
 # Main deployable artifacts  →  <builddir>/bin/
