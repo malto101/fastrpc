@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "../../fastrpc_utils/test_utils.h"
-#include "../../log_capture/log_capture.h"
 #include "unity_fixture.h"           /* Include to get Unity types */
 #include "unity_fixture_internals.h" /* For UnityFixture (GroupFilter/Group/NameFilter/Name) */
 #include "unity_internals.h"
@@ -365,123 +364,13 @@ int unity_test_case_tag_filter_passes(const char *group, const char *name)
 /* Track whether the custom test runner is active. */
 static int file_output_active = 0;
 
-/* =========================================================================
- * _apply_logs_spec
- *
- * Translates the --logs <spec> CLI value into enable/disable calls on the
- * already-initialized log capture system.
- *
- * Must be called after log_capture_init() and before log_capture_start().
- *
- * Spec tokens:
- *   NULL / ""            no-op — registry defaults already applied by init
- *   "none"               disable every configured source
- *   "all"                enable every source in the registry
- *   "a,b,c"              disable all, then enable only the named sources
- *
- * Unknown names produce a warning that includes a reminder to use
- * --logs list (or log_capture_list_sources()) to see valid names.
- * ========================================================================= */
-static void _apply_logs_spec(const char *spec)
-{
-    if (!spec || spec[0] == '\0')
-        return; /* NULL or empty — keep registry defaults */
-
-    /* Special token: disable everything */
-    if (strcmp(spec, "none") == 0) {
-        log_capture_disable_all_sources();
-        printf("[log_capture] all sources disabled via --logs none\n");
-        return;
-    }
-
-    /* Special token: enable every source in the registry */
-    if (strcmp(spec, "all") == 0) {
-        const log_source_descriptor_t *reg = log_capture_get_registry();
-        for (const log_source_descriptor_t *d = reg; d->name != NULL; d++)
-            log_capture_enable_source(d->name);
-        printf("[log_capture] all sources enabled via --logs all\n");
-        return;
-    }
-
-    /*
-     * Comma-separated list of source names.
-     * Strategy: disable everything first, then enable only the named ones.
-     * This gives "--logs journalctl" the intuitive meaning of
-     * "journalctl only" rather than "journalctl plus whatever was default".
-     */
-    log_capture_disable_all_sources();
-
-    /*
-     * Tokenise in-place using a local copy so we never modify the
-     * original argv string.  Uses strchr() instead of strsep() to stay
-     * within _POSIX_C_SOURCE=200112L (strsep is a BSD extension not
-     * declared under strict POSIX).
-     */
-    char buf[256];
-    strncpy(buf, spec, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-
-    char *cur = buf;
-    while (cur && *cur != '\0') {
-        /* Find the next comma delimiter */
-        char *comma = strchr(cur, ',');
-        if (comma)
-            *comma = '\0'; /* terminate this token in-place */
-
-        char *token = cur;
-
-        /* Trim leading spaces */
-        while (*token == ' ')
-            token++;
-        /* Trim trailing spaces */
-        char *end = token + strlen(token);
-        while (end > token && *(end - 1) == ' ')
-            *(--end) = '\0';
-
-        if (*token != '\0') {
-            if (log_capture_enable_source(token) == 0) {
-                printf("[log_capture] enabled source: %s\n", token);
-            } else {
-                fprintf(stderr,
-                        "[log_capture] Warning: unknown log source '%s' in "
-                        "--logs spec (run with --logs list to see available "
-                        "sources)\n",
-                        token);
-            }
-        }
-
-        /* Advance past the delimiter, or stop if we were at the last token */
-        cur = comma ? comma + 1 : NULL;
-    }
-}
-
 int UnityFixtureFileOutputBegin(const char *output_dir, const char *base_name)
 {
+    (void)output_dir;
     (void)base_name;
 
-    if (log_capture_init(output_dir, NULL) != 0) {
-        fprintf(stderr, "Warning: Failed to initialize log capture\n");
-        /* Continue anyway - log capture is optional */
-    } else {
-        /*
-         * Apply the --logs <spec> value from the CLI (parsed earlier by
-         * test_config_init into g_test_config.logs_spec).  This runs after
-         * log_capture_init() so the live config is already populated from
-         * the registry and enable/disable calls work correctly.
-         *
-         * Spec semantics:
-         *   NULL / ""            no-op: registry defaults already applied
-         *   "none"               disable every source
-         *   "all"                enable every registered source
-         *   "a,b"                disable all, then enable only a and b
-         */
-        _apply_logs_spec(g_test_config.logs_spec);
-    }
-
     file_output_active = 1;
-
     print_suite_banner("FastRPC Tests");
-
     return 0;
 }
 
@@ -489,10 +378,6 @@ int UnityFixtureFileOutputEnd(void)
 {
     if (!file_output_active) {
         return 0;
-    }
-
-    if (log_capture_is_initialized()) {
-        log_capture_cleanup();
     }
 
     print_summary(Unity.NumberOfTests, Unity.TestFailures, Unity.TestIgnores);
@@ -689,12 +574,8 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
 
     /*
      * Guard: if the current filter settings would cause Unity to skip this
-     * test entirely, delegate immediately without touching log capture. This
-     * prevents log files from being created for tests that were never
-     * selected by -G / -g / -N / -n.
-     *
-     * The check mirrors Unity's own `testSelected() && groupSelected()`
-     * logic in unity_fixture.c so the two are always in sync.
+     * test entirely, delegate immediately. The check mirrors Unity's own
+     * `testSelected() && groupSelected()` logic in unity_fixture.c.
      */
     if (!is_test_selected(group, name)) {
         OriginalUnityTestRunner(setup, test_body, teardown, printable_name, group, name, file,
@@ -749,16 +630,7 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
 
     print_test_header(group, name);
 
-    /* Start log capture for this test */
-    if (log_capture_is_initialized()) {
-        if (log_capture_start(printable_name, group) != 0) {
-            fprintf(stderr, "Warning: Failed to start log capture for test %s\n", printable_name);
-        }
-    }
-
-    /* Run the test using the original Unity test runner.
-     * Any output produced by the test body (e.g. [dspqueue-feature] lines)
-     * will appear between the header box and the footer printed below. */
+    /* Run the test using the original Unity test runner. */
     OriginalUnityTestRunner(setup, test_body, teardown, printable_name, group, name, file, line);
 
     /* Guarantee a newline after the test body completes so the footer
@@ -807,12 +679,6 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
         fclose(capture_file);
     }
 
-    /* Stop log capture after the test body and footer are complete. */
-    if (log_capture_is_active()) {
-        if (log_capture_stop() != 0) {
-            fprintf(stderr, "Warning: Failed to stop log capture for test %s\n", printable_name);
-        }
-    }
 }
 
 int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(void))

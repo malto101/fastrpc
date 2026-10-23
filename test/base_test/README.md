@@ -45,17 +45,12 @@ test/base_test/
 │
 ├── utils/                          # shared test infrastructure
 │   ├── fastrpc_utils/              # DSP domain helpers, error strings, CLI parsing
-│   ├── log_capture/                # kernel / logcat log capture
 │   └── reporting/
 │       └── unity/                  # Unity fixture output hooks
 │
-├── test/
-│   ├── feature/
-│   │   └── dspqueue/              # DSPQueue tests
-│   │       └── all_tests.c        # suite entry point
-│   └── unit/
-│       └── dspqueue/
-|           └── all_tests.c
+├── test/                           # unit and feature suites
+│   ├── feature/                    # feature-suite sources
+│   └── unit/                       # unit-suite sources
 │
 ├── bin/
 │   └── CMakeLists.txt              # builds host binary, plugin, and DSP skel
@@ -185,7 +180,7 @@ The CPU-side test executable.  Links together:
 - `root_all_tests.c` — `main()`, initialises reporting, dispatches suite runners
 - suite static libraries containing the unit and feature test sources
 - `fastrpc_test_stub` — QAIC-generated CPU→DSP RPC stub
-- `utils` — reporting, log capture, and FastRPC helper utilities
+- `utils` — reporting and FastRPC helper utilities
 - `unity` — ThrowTheSwitch/Unity test framework (fixture + memory extensions)
 - `libcdsprpc.so` — FastRPC runtime (dynamically linked)
 
@@ -244,12 +239,6 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/fastrpc_test"
 # Run all tests on every discovered, running FastRPC DSP domain
 ./bin/fastrpc_test
 
-# Run a specific test group
-./bin/fastrpc_test -g DspHeapStress
-
-# Run a specific test case
-./bin/fastrpc_test -g DspHeapStress -n SmallFixedSize
-
 # List test metadata without accessing a DSP or running tests
 ./bin/fastrpc_test -l tests
 ./bin/fastrpc_test -l groups
@@ -259,9 +248,6 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/fastrpc_test"
 ./bin/fastrpc_test --list-tests
 ./bin/fastrpc_test --list-groups
 ./bin/fastrpc_test --list-tags
-
-# List matching tests without running them
-./bin/fastrpc_test --list-tests -G DspQueueCreate --all-tags negative
 
 # Verbose output (prints each test name as it runs)
 ./bin/fastrpc_test -v
@@ -279,7 +265,7 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/fastrpc_test"
 ./bin/fastrpc_test --any-tags feature positive
 
 # Filter by tag (AND — run tests that have all of these tags)
-./bin/fastrpc_test --all-tags UserHeap dsp_heap_stress
+./bin/fastrpc_test --all-tags Remote positive
 
 # Suppress output for passing tests — only failures and skips are shown
 ./bin/fastrpc_test --silent
@@ -311,18 +297,12 @@ root@iq-9075-evk:/usr/local/bin# fastrpc_test -d 3
 Unity test run 1 of 1
 [test_utils] DSP_LIBRARY_PATH=/usr/share;/usr/local/share
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  TEST  DspQueueCreate :: ValidDefaultParametersSucceeds                     │
+│  TEST  RemoteHandleOpen :: ValidUriSucceeds                                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 .
   Error codes : 0x00000000 (AEE_SUCCESS) ×2
   Result      : ✔ PASS
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TEST  DspQueueCreate :: SmallQueueSizesSucceed                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-.
-  Error codes : 0x00000000 (AEE_SUCCESS) ×2
-  Result      : ✔ PASS
 [... additional test output ...]
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  TEST  RemoteHeapSessionLifecycle :: CreateAudioStaticPDAndLoadSkel         │
@@ -355,27 +335,22 @@ FAIL
 
 ### Add a new test case to an existing group
 
-1. Open `test/feature/user_heap/test_dsp_heap_stress.c`.
-2. Add a `TEST(DspHeapStress, MyNewCase) { ... }` block.
-3. Register it in `TEST_GROUP_RUNNER(DspHeapStress)` with
-   `RUN_TEST_CASE(DspHeapStress, MyNewCase)`.
-4. Optionally annotate with `TEST_CASE_TAGS(DspHeapStress, MyNewCase, "tag1", "tag2")`.
-5. Rebuild — no CMake changes needed.
+1. Add a `TEST(<GroupName>, <CaseName>) { ... }` block to the suite source.
+2. Register it in the suite's `TEST_GROUP_RUNNER(<GroupName>)` with
+   `RUN_TEST_CASE(<GroupName>, <CaseName>)`.
+3. Annotate it with `TEST_CASE_TAGS()` using the suite's tag vocabulary.
+4. Rebuild — no CMake changes are needed.
 
-### Add a new test group to the `user_heap` suite
+Each test source should contain one group, its setup/teardown functions, and
+its group runner. The `CONFIGURE_DEPENDS` glob picks up new `test_*.c` files.
 
-1. Create `test/feature/user_heap/test_<name>.c` following the pattern of
-   `test_dsp_heap_stress.c`:
-   - `TEST_GROUP(<GroupName>)`
-   - `TEST_SETUP` / `TEST_TEAR_DOWN`
-   - One or more `TEST(<GroupName>, <CaseName>)` blocks
-   - `TEST_GROUP_RUNNER(<GroupName>)` calling each `RUN_TEST_CASE`
-2. In `test/feature/user_heap/all_tests.c`:
-   - Add `void TEST_<GroupName>_GROUP_RUNNER(void);` (no `extern` — see
-     [Linux kernel coding style](#linux-kernel-coding-style))
-   - Add `RUN_TEST_GROUP(<GroupName>);` inside `run_user_heap_feature_tests()`
-3. Rebuild — CMake picks up the new `test_*.c` automatically via
-   `CONFIGURE_DEPENDS` glob.
+#### Add a new test group
+
+1. Create `test/feature/<suite>/test_<name>.c` or
+   `test/unit/<suite>/test_<name>.c`.
+2. Define the group, setup/teardown, test cases, and group runner.
+3. Add the group runner to the suite's `all_tests.c`.
+4. Rebuild.
 
 ### Add a new feature suite
 
@@ -496,8 +471,8 @@ Every new `CMakeLists.txt` must begin with:
   opened.  Hardware absence is not a test failure.
 - **Annotate every test case** with `TEST_CASE_TAGS` so tag-based filtering
   works.  Minimum required tags: feature classification (e.g. `"feature"`),
-  polarity (`"positive"` or `"negative"`), and a functional tag
-  (e.g. `"dsp_heap_stress"`).
+  polarity (`"positive"` or `"negative"`), and a functional tag such as
+  `"Remote"` or `"RpcMem"`.
 - **No `printf` in `TEST_SETUP` / `TEST_TEAR_DOWN`** beyond the session open/
   close lines already established.  Diagnostic output belongs in the test body.
 - **Elapsed time must be reported** for any test that calls a timed DSP method.
@@ -542,7 +517,7 @@ Every new `CMakeLists.txt` must begin with:
 
   Examples:
   ```
-  user_heap: add RapidCycles stress test
+  remote: add session lifecycle coverage
   idl: bump IDL_VERSION to 1.2.5, add malloc_free_stress method
   utils: remove csv reporting from base_test
   ```

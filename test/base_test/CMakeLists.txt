@@ -28,7 +28,6 @@
 # RUNNING TESTS
 # -------------
 #   ./bin/fastrpc_test                        # run all tests
-#   ./bin/fastrpc_test -g DspHeapStress       # run one group
 #   ./bin/fastrpc_test -v                     # verbose output
 #
 # ADDING A NEW FEATURE SUITE
@@ -78,7 +77,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/cmake/platform/${TARGET_PLATFORM}.cmake")
 project(base_test
     VERSION     1.0.0
     LANGUAGES   C
-    DESCRIPTION "FastRPC base test suite (user_heap, dspqueue)"
+    DESCRIPTION "FastRPC base test suite"
 )
 
 include(GNUInstallDirs)

@@ -55,7 +55,6 @@ test_config_t g_test_config = {
     .unsigned_pd = 1,
     .silent_mode = 0,
     .list_mode = TEST_LIST_NONE,
-    .logs_spec = NULL,    /* NULL = use registry defaults     */
     .any_tags = { NULL }, /* populated by --any-tags / --tags */
     .any_tag_count = 0,
     .all_tags = { NULL }, /* populated by --all-tags          */
@@ -234,7 +233,6 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
     const char **filtered = malloc((size_t)argc * sizeof(const char *));
     int any_tag_via_alias[TEST_CONFIG_MAX_TAGS] = { 0 };
     int domains_explicit = 0;
-    int logs_explicit = 0;
     int unsigned_pd_explicit = 0;
     int silent_explicit = 0;
 
@@ -249,7 +247,6 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
     g_test_config.unsigned_pd = 1;
     g_test_config.silent_mode = 0;
     g_test_config.list_mode = TEST_LIST_NONE;
-    g_test_config.logs_spec = NULL;
     g_test_config.any_tag_count = 0;
     g_test_config.all_tag_count = 0;
 
@@ -309,9 +306,6 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
              */
             g_test_config.silent_mode = 1;
             silent_explicit = 1;
-        } else if (strcmp(argv[i], "--logs") == 0 && i + 1 < argc) {
-            g_test_config.logs_spec = argv[++i];
-            logs_explicit = 1;
         } else if (strcmp(argv[i], "--any-tags") == 0 && i + 1 < argc) {
             /*
              * --any-tags <tag>  (repeatable, up to TEST_CONFIG_MAX_TAGS)
@@ -379,8 +373,6 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
         printf("[test_config] unsigned_pd = %d\n", g_test_config.unsigned_pd);
     if (silent_explicit)
         printf("[test_config] silent_mode = %d\n", g_test_config.silent_mode);
-    if (logs_explicit)
-        printf("[test_config] logs_spec = %s\n", g_test_config.logs_spec);
     for (int i = 0; i < g_test_config.any_tag_count; i++) {
         printf("[test_config] any-tag filter[%d] = %s%s\n", i, g_test_config.any_tags[i],
                any_tag_via_alias[i] ? " (via --tags)" : "");

@@ -11,7 +11,6 @@
 set(_utils_all_inc
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/fastrpc_utils"
-    "${CMAKE_CURRENT_SOURCE_DIR}/log_capture"
     "${CMAKE_CURRENT_SOURCE_DIR}/reporting/unity"
     "${FASTRPC_TEST_IDL_INC_DIR}"
     "${FASTRPC_INC_DIR}"
@@ -25,7 +24,6 @@ set(_utils_all_inc
 # ----------------------------------------------------------------------------
 add_library(fastrpc_test_utils STATIC
     reporting/unity/unity_fixture_file_output.c
-    log_capture/log_capture.c
     fastrpc_utils/test_utils.c
 )
 add_dependencies(fastrpc_test_utils fastrpc_test_idl)
@@ -56,6 +54,5 @@ target_link_libraries(utils_dep INTERFACE
 target_include_directories(utils_dep INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/fastrpc_utils"
-    "${CMAKE_CURRENT_SOURCE_DIR}/log_capture"
     "${CMAKE_CURRENT_SOURCE_DIR}/reporting/unity"
 )
