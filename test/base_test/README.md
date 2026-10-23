@@ -48,9 +48,11 @@ test/base_test/
 │   └── reporting/
 │       └── unity/                  # Unity fixture output hooks
 │
-├── test/                           # unit and feature suites
+├── test/                           # unit, feature, and E2E suites
 │   ├── feature/                    # feature-suite sources
-│   └── unit/                       # unit-suite sources
+│   ├── unit/                       # unit-suite sources
+│   └── e2e/                        # calculator and HAP sample suites
+│       └── <sample>/               # Unity test sources
 │
 ├── bin/
 │   └── CMakeLists.txt              # builds host binary, plugin, and DSP skel
@@ -58,6 +60,22 @@ test/base_test/
 └── vendor/
     └── unity/                      # ThrowTheSwitch/Unity (git submodule)
 ```
+
+Calculator and HAP use methods in the common `idl/fastrpc_test.idl` interface.
+Their DSP implementations live in `idl/impl/fastrpc_test_imp.c`, so all
+base-test cases share one generated stub and DSP skeleton.
+
+Multithreading is intentionally not included until its target-specific QuRT
+behavior can be integrated into the common implementation cleanly.
+
+The E2E suites reuse the existing base-test domain URI, unsigned-PD, reporting,
+and generated-stub infrastructure. Deploy the normal
+`libfastrpc_test_skel.so` for these cases.
+
+The calculator cases cover sum, maximum, and invalid input handling. The HAP
+case covers FARF runtime logging configuration. Both suites are tagged `e2e`.
+
+A target-side HAP SDK is required to build and run the FARF implementation.
 
 ---
 
@@ -160,8 +178,12 @@ cmake --build builddir
 | `FASTRPC_ROOT` | auto-detected | Path to the fastrpc repository root |
 | `QAIC_EXECUTABLE` | — | Path to the QAIC compiler (required) |
 | `ANDROID_NDK_HOME` | — | Path to the Android NDK root (android only) |
-| `DSP_ARCH` | `73` | Hexagon DSP architecture version (e.g. `68`, `73`, `75`) |
+| `DSP_ARCH` | `73` | Generic base-test DSP architecture (e.g. `68`, `73`, `75`) |
 | `CMAKE_BUILD_TYPE` | `RelWithDebInfo` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
+
+The calculator and HAP cases use the normal `libfastrpc_test_skel.so` artifact.
+The HAP implementation requires the target HAP SDK headers when building the
+common DSP implementation.
 
 `FASTRPC_ROOT` is auto-detected as `../..` relative to this directory when not
 set explicitly, which is correct when `base_test` lives at
@@ -269,6 +291,9 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/fastrpc_test"
 
 # Suppress output for passing tests — only failures and skips are shown
 ./bin/fastrpc_test --silent
+
+# E2E tests only (all E2E cases carry the `e2e` tag)
+./bin/fastrpc_test --all-tags e2e -d 3
 ```
 
 Listing commands print one sorted entry per line. Existing group, test-name,

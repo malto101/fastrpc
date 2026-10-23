@@ -22,6 +22,9 @@
  *   case 14 -> fastrpc_test_profiling_asm_iterations_pcycles
  *   case 15 -> fastrpc_test_profiling_asm_iterations_qtimer
  *   case 16 -> fastrpc_test_malloc_free_stress
+ *   case 17 -> fastrpc_test_calculator_sum
+ *   case 18 -> fastrpc_test_calculator_max
+ *   case 19 -> fastrpc_test_hap_example_farf_runtime
  *
  * Handle value contract
  * ---------------------
@@ -61,6 +64,8 @@
 #include "AEEStdErr.h"
 #include "HAP_farf.h"
 #include "dspqueue.h"
+
+/* The HAP FARF header is supplied by the target DSP SDK. */
 #include "fastrpc_test.h"
 
 #include <limits.h>
@@ -221,6 +226,45 @@ int fastrpc_test_matmul(remote_handle64 h, const float *a, int a_len, const floa
             c[row * 3 + col] = sum;
         }
     return 0;
+}
+
+int fastrpc_test_calculator_sum(remote_handle64 h, const int *values, int values_len,
+                                int64_t *result)
+{
+    int64_t sum = 0;
+
+    (void)h;
+    if (values == NULL || result == NULL || values_len <= 0)
+        return AEE_EBADPARM;
+    for (int i = 0; i < values_len; i++)
+        sum += values[i];
+    *result = sum;
+    return AEE_SUCCESS;
+}
+
+int fastrpc_test_calculator_max(remote_handle64 h, const int *values, int values_len,
+                                int *result)
+{
+    (void)h;
+    if (values == NULL || result == NULL || values_len <= 0)
+        return AEE_EBADPARM;
+
+    *result = values[0];
+    for (int i = 1; i < values_len; i++)
+        if (values[i] > *result)
+            *result = values[i];
+    return AEE_SUCCESS;
+}
+
+int fastrpc_test_hap_example_farf_runtime(remote_handle64 h, int enable)
+{
+    (void)h;
+    HAP_setFARFRuntimeLoggingParams(enable ? 0x1f : 0, NULL, 0);
+    FARF(LOW, "FARF low logging %s", enable ? "enabled" : "disabled");
+    FARF(MEDIUM, "FARF medium logging %s", enable ? "enabled" : "disabled");
+    FARF(HIGH, "FARF high logging %s", enable ? "enabled" : "disabled");
+    FARF(ERROR, "FARF error logging %s", enable ? "enabled" : "disabled");
+    return AEE_SUCCESS;
 }
 
 /* --- FFT helpers --------------------------------------------------------- */

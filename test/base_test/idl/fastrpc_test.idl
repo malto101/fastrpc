@@ -1,7 +1,7 @@
 #include "AEEStdDef.idl"
 #include "remote.idl"
 
-const string IDL_VERSION = "1.2.4";
+const string IDL_VERSION = "1.2.5";
 
 /**
  * fastrpc_test - minimal DSP module used by the fastrpc-test unit tests.
@@ -190,4 +190,11 @@ interface fastrpc_test : remote_handle64 {
                             in long iterations,
                             in long num_allocs,
                             rout uint64 elapsed_us);
+
+    /* Calculator sample operations. */
+    long calculator_sum(in sequence<long> values, rout int64 result);
+    long calculator_max(in sequence<long> values, rout long result);
+
+    /* HAP FARF runtime logging sample operation. */
+    long hap_example_farf_runtime(in long runtime_logging_enable);
 };
