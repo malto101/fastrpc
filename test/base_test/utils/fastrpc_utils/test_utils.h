@@ -29,8 +29,10 @@ extern "C" {
  * Increasing this constant is the only change needed to support more tags. */
 #define TEST_CONFIG_MAX_TAGS 32
 
-/* FastRPC exposes seven named DSP domains. */
-#define TEST_CONFIG_MAX_DOMAINS 7
+/* domain_ids[] has room for every FastRPC domain ID.  The set of named
+ * domains supported by this test is defined by the metadata table in
+ * test_utils.c. */
+
 
 typedef enum {
     TEST_LIST_NONE = 0,
@@ -85,7 +87,7 @@ typedef enum {
  */
 typedef struct {
     int domain_id;
-    int domain_ids[TEST_CONFIG_MAX_DOMAINS];
+    int domain_ids[NUM_DOMAINS];
     int domain_count;
     int unsigned_pd;
     int silent_mode; /**< --silent; suppress per-test output for passing tests */
@@ -105,19 +107,21 @@ extern test_config_t g_test_config;
 int test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv);
 
 /* Builds a fully-qualified fastrpc_test URI for g_test_config.domain_id into buf.
- * buf must be at least sizeof(fastrpc_test_URI) + MAX_DOMAIN_URI_SIZE_SAFE bytes. */
-void test_utils_domain_uri(char *buf, size_t buflen);
-void test_utils_domain_uri_for(int domain_id, char *buf, size_t buflen);
+ * Returns 0 on success, or -1 for an unknown domain, invalid buffer, or a
+ * buffer too small for the URI.  On failure, buf is cleared when possible. */
+int test_utils_domain_uri(char *buf, size_t buflen);
+int test_utils_domain_uri_for(int domain_id, char *buf, size_t buflen);
 
 /* Returns the plain domain name string (e.g. "cdsp", "adsp") for
- * g_test_config.domain_id. Returns CDSP_DOMAIN_NAME for unknown IDs.
- * Use with FASTRPC_RESERVE_NEW_SESSION / FASTRPC_GET_URI APIs. */
+ * g_test_config.domain_id, or NULL for an unknown ID. */
 const char *test_utils_domain_name(void);
 const char *test_utils_domain_name_for(int domain_id);
 
 /* Sets DSP_LIBRARY_PATH, appending SKEL_SEARCH_PATH to any existing value.
  * Must be called before any fastrpc API. Returns 0 on success, -1 on failure. */
 int test_utils_setup_dsp_lib_path(void);
+
+void test_config_free_argv(const char **argv);
 
 /* Calls remote_session_control(DSPRPC_CONTROL_UNSIGNED_MODULE) for the given domain.
  * Must be called before remote_handle_open when the skel is unsigned. */

@@ -16,8 +16,10 @@ static int calculator_open(void)
 {
     char uri[512];
 
-    test_utils_domain_uri(uri, sizeof(uri));
     calculator_handle = (remote_handle64)-1;
+    if (test_utils_domain_uri(uri, sizeof(uri)) != 0)
+        return AEE_EBADDOMAIN;
+
     return fastrpc_test_open(uri, &calculator_handle);
 }
 

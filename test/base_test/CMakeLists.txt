@@ -236,8 +236,8 @@ target_compile_options(common_test_iface INTERFACE
 add_library(common_test_dep INTERFACE)
 target_link_libraries(common_test_dep INTERFACE
     common_test_iface
-    unity_dep
     utils_dep
+    unity_dep
     fastrpc_dep
     fastrpc_test_stub)
 

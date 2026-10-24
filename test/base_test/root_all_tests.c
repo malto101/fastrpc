@@ -28,11 +28,13 @@
 
 /* ---- Root dispatcher ---------------------------------------------------- */
 
+void run_test_utils_tests(void);
 void run_calculator_e2e_tests(void);
 void run_hap_example_e2e_tests(void);
 
 static void run_all_tests(void)
 {
+    run_test_utils_tests();
     run_calculator_e2e_tests();
     run_hap_example_e2e_tests();
 }
@@ -48,7 +50,7 @@ static int run_base_tests(int argc, const char *argv[])
 
     if (g_test_config.list_mode != TEST_LIST_NONE) {
         if (UnityGetCommandLineOptions(filtered_argc, filtered_argv) != 0) {
-            free((void *)filtered_argv);
+            test_config_free_argv(filtered_argv);
             return 2;
         }
 
@@ -66,16 +68,19 @@ static int run_base_tests(int argc, const char *argv[])
             break;
         }
 
-        free((void *)filtered_argv);
+        test_config_free_argv(filtered_argv);
         return result == 0 ? 0 : 2;
     }
 
     for (int i = 0; i < g_test_config.domain_count; i++) {
         int domain_result;
 
+        const char *domain_name;
+
         g_test_config.domain_id = g_test_config.domain_ids[i];
+        domain_name = test_utils_domain_name();
         printf("\n[test_config] running tests on %s domain (%d)\n",
-               test_utils_domain_name(), g_test_config.domain_id);
+               domain_name ? domain_name : "<invalid>", g_test_config.domain_id);
 
         if (UnityFixtureFileOutputBegin(NULL, NULL) != 0)
             fprintf(stderr, "Warning: Failed to initialize custom Unity output\n");
@@ -86,7 +91,7 @@ static int run_base_tests(int argc, const char *argv[])
         result += domain_result;
     }
 
-    free((void *)filtered_argv);
+    test_config_free_argv(filtered_argv);
 
     return result;
 }

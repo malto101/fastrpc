@@ -16,7 +16,9 @@
 # link all suite libraries into fastrpc_test.
 
 # Suite names — add a new entry here when creating a new test/unit/<name>/ dir.
-set(_unit_suites)
+set(_unit_suites
+    test_utils
+)
 
 set(_new_suite_libs "")
 

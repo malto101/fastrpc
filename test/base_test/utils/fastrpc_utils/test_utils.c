@@ -26,27 +26,65 @@
 
 typedef struct {
     int domain_id;
+    const char *domain_name;
+    const char *uri_suffix;
     const char *remoteproc_names[2];
     const char *devnodes[2];
 } domain_probe_t;
 
-/* Keep domain aliases and device nodes aligned with fastrpc-healthcheck. */
+/* Keep all domain identity and discovery information in one table. */
 static const domain_probe_t domain_probes[] = {
-    { ADSP_DOMAIN_ID, { "adsp", NULL },
+    { ADSP_DOMAIN_ID, ADSP_DOMAIN_NAME, ADSP_DOMAIN,
+      { "adsp", NULL },
       { "/dev/fastrpc-adsp", "/dev/fastrpc-adsp-secure" } },
-    { MDSP_DOMAIN_ID, { "mdsp", NULL },
+    { MDSP_DOMAIN_ID, MDSP_DOMAIN_NAME, MDSP_DOMAIN,
+      { "mdsp", NULL },
       { "/dev/fastrpc-mdsp", "/dev/fastrpc-mdsp-secure" } },
-    { SDSP_DOMAIN_ID, { "sdsp", "slpi" },
+    { SDSP_DOMAIN_ID, SDSP_DOMAIN_NAME, SDSP_DOMAIN,
+      { "sdsp", "slpi" },
       { "/dev/fastrpc-sdsp", "/dev/fastrpc-sdsp-secure" } },
-    { CDSP_DOMAIN_ID, { "cdsp", NULL },
+    { CDSP_DOMAIN_ID, CDSP_DOMAIN_NAME, CDSP_DOMAIN,
+      { "cdsp", NULL },
       { "/dev/fastrpc-cdsp", "/dev/fastrpc-cdsp-secure" } },
-    { CDSP1_DOMAIN_ID, { "cdsp1", NULL },
+    { CDSP1_DOMAIN_ID, CDSP1_DOMAIN_NAME, CDSP1_DOMAIN,
+      { "cdsp1", NULL },
       { "/dev/fastrpc-cdsp1", "/dev/fastrpc-cdsp1-secure" } },
-    { GDSP0_DOMAIN_ID, { "gpdsp0", "gdsp0" },
+    { GDSP0_DOMAIN_ID, GDSP0_DOMAIN_NAME, GDSP0_DOMAIN,
+      { "gpdsp0", "gdsp0" },
       { "/dev/fastrpc-gdsp0", "/dev/fastrpc-gdsp0-secure" } },
-    { GDSP1_DOMAIN_ID, { "gpdsp1", "gdsp1" },
+    { GDSP1_DOMAIN_ID, GDSP1_DOMAIN_NAME, GDSP1_DOMAIN,
+      { "gpdsp1", "gdsp1" },
       { "/dev/fastrpc-gdsp1", "/dev/fastrpc-gdsp1-secure" } },
 };
+
+#define DOMAIN_PROBE_COUNT (sizeof(domain_probes) / sizeof(domain_probes[0]))
+#define DOMAIN_ALIAS_COUNT \
+    (sizeof(domain_probes[0].remoteproc_names) / sizeof(domain_probes[0].remoteproc_names[0]))
+#define DOMAIN_DEVNODE_COUNT \
+    (sizeof(domain_probes[0].devnodes) / sizeof(domain_probes[0].devnodes[0]))
+
+static const domain_probe_t *find_domain_probe(int domain_id)
+{
+    for (size_t i = 0; i < DOMAIN_PROBE_COUNT; i++) {
+        if (domain_probes[i].domain_id == domain_id)
+            return &domain_probes[i];
+    }
+
+    return NULL;
+}
+
+static int domain_probe_index(int domain_id)
+{
+    for (size_t i = 0; i < DOMAIN_PROBE_COUNT; i++) {
+        if (domain_probes[i].domain_id == domain_id)
+            return (int)i;
+    }
+
+    return -1;
+}
+
+_Static_assert(DOMAIN_PROBE_COUNT <= NUM_DOMAINS,
+               "domain_ids[] cannot hold every supported domain");
 
 test_config_t g_test_config = {
     .domain_id = DEFAULT_DOMAIN_ID,
@@ -84,36 +122,24 @@ static int read_text_file(const char *path, char *buf, size_t buflen)
 
 static int remoteproc_name_matches(const char *name, const char *key)
 {
-    const char *match;
-    size_t key_len;
-
-    match = strstr(name, key);
-    if (!match)
-        return 0;
-
-    key_len = strlen(key);
-    if (!isdigit((unsigned char)key[key_len - 1]) &&
-        isdigit((unsigned char)match[key_len]))
-        return 0;
-
-    return 1;
+    return name != NULL && key != NULL && strcmp(name, key) == 0;
 }
 
 static int domain_has_devnode(const domain_probe_t *probe)
 {
     struct stat st;
 
-    for (size_t i = 0; i < 2; i++) {
-        if (stat(probe->devnodes[i], &st) == 0 && S_ISCHR(st.st_mode))
+    for (size_t i = 0; i < DOMAIN_DEVNODE_COUNT; i++) {
+        if (probe->devnodes[i] != NULL && stat(probe->devnodes[i], &st) == 0 && S_ISCHR(st.st_mode))
             return 1;
     }
 
     return 0;
 }
 
-static int discover_domains(int domains[TEST_CONFIG_MAX_DOMAINS])
+static int discover_domains(int domains[NUM_DOMAINS])
 {
-    int running[TEST_CONFIG_MAX_DOMAINS] = { 0 };
+    int running[DOMAIN_PROBE_COUNT] = { 0 };
     DIR *dir;
     struct dirent *entry;
     int count = 0;
@@ -149,8 +175,9 @@ static int discover_domains(int domains[TEST_CONFIG_MAX_DOMAINS])
         if (strstr(state, "running") == NULL)
             continue;
 
-        for (size_t i = 0; i < TEST_CONFIG_MAX_DOMAINS; i++) {
-            for (size_t j = 0; j < 2 && domain_probes[i].remoteproc_names[j]; j++) {
+        for (size_t i = 0; i < DOMAIN_PROBE_COUNT; i++) {
+            for (size_t j = 0; j < DOMAIN_ALIAS_COUNT &&
+                            domain_probes[i].remoteproc_names[j]; j++) {
                 if (remoteproc_name_matches(name, domain_probes[i].remoteproc_names[j])) {
                     running[i] = 1;
                     break;
@@ -161,7 +188,7 @@ static int discover_domains(int domains[TEST_CONFIG_MAX_DOMAINS])
 
     closedir(dir);
 
-    for (size_t i = 0; i < TEST_CONFIG_MAX_DOMAINS; i++) {
+    for (size_t i = 0; i < DOMAIN_PROBE_COUNT; i++) {
         if (running[i] && domain_has_devnode(&domain_probes[i]))
             domains[count++] = domain_probes[i].domain_id;
     }
@@ -176,7 +203,7 @@ static int add_explicit_domain(int domain_id)
             return 0;
     }
 
-    if (g_test_config.domain_count >= TEST_CONFIG_MAX_DOMAINS)
+    if (g_test_config.domain_count >= (int)DOMAIN_PROBE_COUNT)
         return -1;
 
     g_test_config.domain_ids[g_test_config.domain_count++] = domain_id;
@@ -193,11 +220,12 @@ static int parse_domain_id(const char *value, int *domain_id)
     if (errno != 0 || *value == '\0' || *end != '\0')
         return -1;
 
-    for (size_t i = 0; i < TEST_CONFIG_MAX_DOMAINS; i++) {
-        if (domain_probes[i].domain_id == parsed) {
-            *domain_id = (int)parsed;
-            return 0;
-        }
+    if (parsed < INT_MIN || parsed > INT_MAX)
+        return -1;
+
+    if (domain_probe_index((int)parsed) >= 0) {
+        *domain_id = (int)parsed;
+        return 0;
     }
 
     return -1;
@@ -392,9 +420,12 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
 
     printf("[test_config] %s domains:",
            domains_explicit ? "selected" : "discovered");
-    for (int i = 0; i < g_test_config.domain_count; i++)
-        printf(" %s(%d)", test_utils_domain_name_for(g_test_config.domain_ids[i]),
+    for (int i = 0; i < g_test_config.domain_count; i++) {
+        const char *domain_name = test_utils_domain_name_for(g_test_config.domain_ids[i]);
+
+        printf(" %s(%d)", domain_name ? domain_name : "<invalid>",
                g_test_config.domain_ids[i]);
+    }
     putchar('\n');
 
     *out_argc = fi;
@@ -402,65 +433,37 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
     return 0;
 }
 
-void test_utils_domain_uri_for(int domain_id, char *buf, size_t buflen)
+int test_utils_domain_uri_for(int domain_id, char *buf, size_t buflen)
 {
-    /* To add a new DSP type: add one case here and in test_utils_domain_name(). */
-    const char *domain_suffix;
-    switch (domain_id) {
-    case ADSP_DOMAIN_ID:
-        domain_suffix = ADSP_DOMAIN;
-        break;
-    case MDSP_DOMAIN_ID:
-        domain_suffix = MDSP_DOMAIN;
-        break;
-    case SDSP_DOMAIN_ID:
-        domain_suffix = SDSP_DOMAIN;
-        break;
-    case CDSP_DOMAIN_ID:
-        domain_suffix = CDSP_DOMAIN;
-        break;
-    case CDSP1_DOMAIN_ID:
-        domain_suffix = CDSP1_DOMAIN;
-        break;
-    case GDSP0_DOMAIN_ID:
-        domain_suffix = GDSP0_DOMAIN;
-        break;
-    case GDSP1_DOMAIN_ID:
-        domain_suffix = GDSP1_DOMAIN;
-        break;
-    default:
-        domain_suffix = "";
-        break;
+    const domain_probe_t *probe = find_domain_probe(domain_id);
+    int written;
+
+    if (buf == NULL || buflen == 0)
+        return -1;
+
+    buf[0] = '\0';
+    if (probe == NULL)
+        return -1;
+
+    written = snprintf(buf, buflen, "%s%s", fastrpc_test_URI, probe->uri_suffix);
+    if (written < 0 || (size_t)written >= buflen) {
+        buf[0] = '\0';
+        return -1;
     }
-    snprintf(buf, buflen, "%s%s", fastrpc_test_URI, domain_suffix);
+
+    return 0;
 }
 
-void test_utils_domain_uri(char *buf, size_t buflen)
+int test_utils_domain_uri(char *buf, size_t buflen)
 {
-    test_utils_domain_uri_for(g_test_config.domain_id, buf, buflen);
+    return test_utils_domain_uri_for(g_test_config.domain_id, buf, buflen);
 }
 
 const char *test_utils_domain_name_for(int domain_id)
 {
-    /* To add a new DSP type: add one case here and in test_utils_domain_uri(). */
-    switch (domain_id) {
-    case ADSP_DOMAIN_ID:
-        return ADSP_DOMAIN_NAME;
-    case MDSP_DOMAIN_ID:
-        return MDSP_DOMAIN_NAME;
-    case SDSP_DOMAIN_ID:
-        return SDSP_DOMAIN_NAME;
-    case CDSP_DOMAIN_ID:
-        return CDSP_DOMAIN_NAME;
-    case CDSP1_DOMAIN_ID:
-        return CDSP1_DOMAIN_NAME;
-    case GDSP0_DOMAIN_ID:
-        return GDSP0_DOMAIN_NAME;
-    case GDSP1_DOMAIN_ID:
-        return GDSP1_DOMAIN_NAME;
-    default:
-        return CDSP_DOMAIN_NAME; /* safe fallback */
-    }
+    const domain_probe_t *probe = find_domain_probe(domain_id);
+
+    return probe != NULL ? probe->domain_name : NULL;
 }
 
 const char *test_utils_domain_name(void)
@@ -471,26 +474,58 @@ const char *test_utils_domain_name(void)
 int test_utils_setup_dsp_lib_path(void)
 {
     static int done = 0;
+    const char *existing;
+    size_t existing_len;
+    size_t search_len;
+    size_t separator_len;
+    size_t total_len;
+    char *path;
+
     if (done)
         return 0;
 
-    char buf[512];
-    const char *existing = getenv("DSP_LIBRARY_PATH");
+    existing = getenv("DSP_LIBRARY_PATH");
+    if (existing == NULL)
+        existing = "";
 
-    if (existing && existing[0] != '\0') {
-        snprintf(buf, sizeof(buf), "%s;%s", existing, SKEL_SEARCH_PATH);
-    } else {
-        snprintf(buf, sizeof(buf), "%s", SKEL_SEARCH_PATH);
-    }
+    existing_len = strlen(existing);
+    search_len = strlen(SKEL_SEARCH_PATH);
+    separator_len = existing_len != 0 ? 1 : 0;
 
-    if (setenv("DSP_LIBRARY_PATH", buf, 1) != 0) {
-        fprintf(stderr, "[test_utils] setenv DSP_LIBRARY_PATH failed: %s\n", strerror(errno));
+    if (existing_len > SIZE_MAX - separator_len ||
+        existing_len + separator_len > SIZE_MAX - search_len ||
+        existing_len + separator_len + search_len > SIZE_MAX - 1) {
+        fprintf(stderr, "[test_utils] DSP_LIBRARY_PATH is too long\n");
         return -1;
     }
 
-    printf("[test_utils] DSP_LIBRARY_PATH=%s\n", buf);
+    total_len = existing_len + separator_len + search_len + 1;
+    path = malloc(total_len);
+    if (path == NULL) {
+        fprintf(stderr, "[test_utils] unable to allocate DSP_LIBRARY_PATH\n");
+        return -1;
+    }
+
+    memcpy(path, existing, existing_len);
+    if (separator_len != 0)
+        path[existing_len] = ';';
+    memcpy(path + existing_len + separator_len, SKEL_SEARCH_PATH, search_len + 1);
+
+    if (setenv("DSP_LIBRARY_PATH", path, 1) != 0) {
+        fprintf(stderr, "[test_utils] setenv DSP_LIBRARY_PATH failed: %s\n", strerror(errno));
+        free(path);
+        return -1;
+    }
+
+    printf("[test_utils] DSP_LIBRARY_PATH=%s\n", path);
+    free(path);
     done = 1;
     return 0;
+}
+
+void test_config_free_argv(const char **argv)
+{
+    free((void *)argv);
 }
 
 int test_utils_enable_unsigned_pd(int domain)
