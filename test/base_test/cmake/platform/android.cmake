@@ -6,12 +6,7 @@
 # Loaded automatically by the root CMakeLists.txt when
 # TARGET_PLATFORM=android.
 #
-# Do NOT include this file directly.  Use:
-#   cmake --preset android \
-#     -DFASTRPC_ROOT=/path/to/fastrpc \
-#     -DANDROID_NDK_HOME=/path/to/android-ndk
-#   cmake --build --preset android
-#
+# Do NOT include this file directly.  It is selected by TARGET_PLATFORM=android.
 # ANDROID_NDK_HOME can also be set in the environment before invoking cmake:
 #   export ANDROID_NDK_HOME=/path/to/android-ndk
 

@@ -6,20 +6,16 @@
 # Loaded automatically by the root CMakeLists.txt when
 # TARGET_PLATFORM=linux (the default).
 #
-# Replaces:  cross/aarch64-linux-gnu.ini
-#
-# Do NOT include this file directly.  Use:
-#   cmake --preset linux
-#   cmake --build --preset linux
+# Do NOT include this file directly.  It is selected by TARGET_PLATFORM=linux.
 
 # ----------------------------------------------------------------------------
-# System identity  (mirrors [host_machine] in the .ini)
+# System identity.
 # ----------------------------------------------------------------------------
 set(CMAKE_SYSTEM_NAME      Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 # ----------------------------------------------------------------------------
-# Toolchain binaries  (mirrors [binaries] in the .ini)
+# Toolchain binaries.
 # ----------------------------------------------------------------------------
 set(CMAKE_C_COMPILER   clang)
 set(CMAKE_CXX_COMPILER clang++)
@@ -29,7 +25,7 @@ set(CMAKE_LINKER       ld.lld     CACHE FILEPATH "Linker")
 set(CMAKE_STRIP        llvm-strip  CACHE FILEPATH "Strip")
 
 # ----------------------------------------------------------------------------
-# Compile / link flags  (mirrors [built-in options] in the .ini)
+# Compile and link flags.
 #
 # --target=aarch64-linux-gnu is the clang way to specify the cross triple.
 # Equivalent to CC="clang --target=aarch64-linux-gnu" in the old Makefile.

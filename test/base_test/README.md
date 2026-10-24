@@ -12,65 +12,24 @@ library.
 
 ## Table of Contents
 
-1. [Repository layout](#repository-layout)
-2. [Prerequisites](#prerequisites)
-3. [Step 1 — Build the fastrpc library](#step-1--build-the-fastrpc-library)
-4. [Step 2 — Configure QAIC generation](#step-2--configure-qaic-generation)
-5. [Step 3 — Build with CMake](#step-3--build-with-cmake)
-6. [Build artifacts](#build-artifacts)
-7. [Running the tests](#running-the-tests)
-   - [Sample output](#sample-output)
-8. [Adding tests](#adding-tests)
-9. [Contributing — rules and policies](#contributing--rules-and-policies)
+1. [Prerequisites](#prerequisites)
+2. [Step 1 — Build the fastrpc library](#step-1--build-the-fastrpc-library)
+3. [Step 2 — Configure QAIC generation](#step-2--configure-qaic-generation)
+4. [Step 3 — Build with CMake](#step-3--build-with-cmake)
+5. [Build artifacts](#build-artifacts)
+6. [Running the tests](#running-the-tests)
+7. [Adding tests](#adding-tests)
+8. [Contributing — rules and policies](#contributing--rules-and-policies)
    - [Linux kernel coding style](#linux-kernel-coding-style)
 
 ---
 
-## Repository layout
+## Prerequisites
 
-```
-test/base_test/
-├── CMakeLists.txt                  # build root
-├── root_all_tests.c                # main() — dispatches all suite runners
-│
-├── cmake/
-│   └── platform/
-│       ├── linux.cmake             # aarch64-linux-gnu toolchain
-│       └── android.cmake           # aarch64-linux-android NDK toolchain
-│
-├── idl/
-│   ├── fastrpc_test.idl            # interface definition (source of truth)
-│   └── impl/
-│       └── fastrpc_test_imp.c      # DSP-side method implementations
-│
-├── utils/                          # shared test infrastructure
-│   ├── fastrpc_utils/              # DSP domain helpers, error strings, CLI parsing
-│   └── reporting/
-│       └── unity/                  # Unity fixture output hooks
-│
-├── test/                           # unit, feature, and E2E suites
-│   ├── feature/                    # feature-suite sources
-│   ├── unit/                       # unit-suite sources
-│   └── e2e/                        # calculator and HAP sample suites
-│       └── <sample>/               # Unity test sources
-│
-├── bin/
-│   └── CMakeLists.txt              # builds host binary, plugin, and DSP skel
-│
-└── vendor/
-    └── unity/                      # ThrowTheSwitch/Unity (git submodule)
-```
-
-Calculator and HAP use methods in the common `idl/fastrpc_test.idl` interface.
-Their DSP implementations live in `idl/impl/fastrpc_test_imp.c`, so all
-base-test cases share one generated stub and DSP skeleton.
-
-Multithreading is intentionally not included until its target-specific QuRT
-behavior can be integrated into the common implementation cleanly.
-
-The E2E suites reuse the existing base-test domain URI, unsigned-PD, reporting,
-and generated-stub infrastructure. Deploy the normal
-`libfastrpc_test_skel.so` for these cases.
+Calculator and HAP use the common `idl/fastrpc_test.idl` interface and
+`idl/impl/fastrpc_test_imp.c` implementation. Both E2E suites share the normal
+base-test domain, unsigned-PD, reporting, and generated-stub infrastructure.
+Deploy `libfastrpc_test_skel.so` for these cases.
 
 The calculator cases cover sum, maximum, and invalid input handling. The HAP
 case covers FARF runtime logging configuration. Both suites are tagged `e2e`.
@@ -78,8 +37,6 @@ case covers FARF runtime logging configuration. Both suites are tagged `e2e`.
 A target-side HAP SDK is required to build and run the FARF implementation.
 
 ---
-
-## Prerequisites
 
 | Tool | Version | Purpose |
 |------|---------|---------|
@@ -113,10 +70,21 @@ cd /path/to/fastrpc
 ./gitcompile --host=aarch64-linux-android
 ```
 
-The build expects the library at:
+The CMake project accepts either an in-tree build or an installed/system
+FastRPC library. Use `FASTRPC_ROOT` for the source checkout, or set
+`FASTRPC_PREFIX`, `FASTRPC_INCLUDE_DIR`, and `FASTRPC_LIBRARY` explicitly.
+The normal in-tree output is `src/.libs/libcdsprpc.so`, including compatible
+versioned filenames.
 
-```
-<fastrpc_root>/src/.libs/libcdsprpc.so
+For cross builds, set the compiler and related tools in the environment as
+described by the FastRPC build instructions; the test build does not override
+the toolchain's dynamic linker.
+
+```bash
+# Optional explicit installed/system library configuration
+-DFASTRPC_PREFIX=/path/to/prefix
+-DFASTRPC_INCLUDE_DIR=/path/to/prefix/include/fastrpc
+-DFASTRPC_LIBRARY=/path/to/prefix/lib/libcdsprpc.so
 ```
 
 ---
@@ -176,6 +144,9 @@ cmake --build builddir
 |--------|---------|-------------|
 | `TARGET_PLATFORM` | `linux` | Target platform: `linux` or `android` |
 | `FASTRPC_ROOT` | auto-detected | Path to the fastrpc repository root |
+| `FASTRPC_PREFIX` | — | FastRPC installation prefix |
+| `FASTRPC_INCLUDE_DIR` | derived | FastRPC headers override |
+| `FASTRPC_LIBRARY` | derived | `libcdsprpc` shared-library override |
 | `QAIC_EXECUTABLE` | — | Path to the QAIC compiler (required) |
 | `ANDROID_NDK_HOME` | — | Path to the Android NDK root (android only) |
 | `DSP_ARCH` | `73` | Generic base-test DSP architecture (e.g. `68`, `73`, `75`) |
@@ -200,7 +171,7 @@ All artifacts are placed in `<builddir>/bin/`.
 The CPU-side test executable.  Links together:
 
 - `root_all_tests.c` — `main()`, initialises reporting, dispatches suite runners
-- suite static libraries containing the unit and feature test sources
+- suite static libraries containing the registered test sources
 - `fastrpc_test_stub` — QAIC-generated CPU→DSP RPC stub
 - `utils` — reporting and FastRPC helper utilities
 - `unity` — ThrowTheSwitch/Unity test framework (fixture + memory extensions)
@@ -307,53 +278,6 @@ completes, a hang inside a test won't show anything on the console until it
 finishes or is interrupted — unlike the default mode, where the header box
 prints live before the test body runs.
 
-### Sample output
-
-```
-root@iq-9075-evk:/usr/local/bin# fastrpc_test -d 3
-[test_config] selected domains: cdsp(3)
-
-[test_config] running tests on cdsp domain (3)
-
-╔═════════════════════════════════════════════════════════════════════════════╗
-║                                FastRPC Tests                                ║
-╚═════════════════════════════════════════════════════════════════════════════╝
-
-Unity test run 1 of 1
-[test_utils] DSP_LIBRARY_PATH=/usr/share;/usr/local/share
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TEST  RemoteHandleOpen :: ValidUriSucceeds                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-.
-  Error codes : 0x00000000 (AEE_SUCCESS) ×2
-  Result      : ✔ PASS
-
-[... additional test output ...]
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TEST  RemoteHeapSessionLifecycle :: CreateAudioStaticPDAndLoadSkel         │
-└─────────────────────────────────────────────────────────────────────────────┘
-.[remote-heap-feature] Initializing remote_heap feature on ADSP domain
-[remote-heap-feature] Stopping adsprpcd_audiopd.service to avoid audiopd attach contention
-[remote-heap-feature] Opening '":;./\createstaticpd:audiopd&_dom=adsp
-[remote-heap-feature] Opening URI: file:///libfastrpc_test_skel.so?fastrpc_test_skel_handle_invoke&_modver=1.0&_idlver=1.2.5&_dom=adsp
-[remote-heap-feature] ERROR: fastrpc_test_open failed: 0x8000042f ((unknown error))
-[remote-heap-feature] Restarting adsprpcd_audiopd.service
-/local/mnt/workspace/dhruv/fastrpc/test/base_test/test/feature/remote_heap/test_session_lifecycle.c:34:TEST(RemoteHeapSessionLifecycle, CreateAudioStaticPDAndLoadSkel):IGNORE: Audio static PD session not available - skipping
-
-  Result      : ⊘ SKIP
------------------------
-127 Tests 2 Failures 10 Ignored
-FAIL
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TEST SUITE SUMMARY                                                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  Total: 127   Passed: 115   Failed: 2   Skipped: 10                         │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  ✘  2 test(s) failed.
-```
-
 ---
 
 ## Adding tests
@@ -394,7 +318,7 @@ its group runner. The `CONFIGURE_DEPENDS` glob picks up new `test_*.c` files.
 ### Add a new IDL method
 
 1. Edit `idl/fastrpc_test.idl` — add the method declaration.
-2. Regenerate with QAIC (see [Step 2](#step-2--generate-idl-stubs-with-qaic)).
+2. Regenerate with QAIC (see [Step 2](#step-2--configure-qaic-generation)).
 3. Implement the method in `idl/impl/fastrpc_test_imp.c`.
 4. Rebuild.
 
@@ -510,8 +434,8 @@ Every new `CMakeLists.txt` must begin with:
 - **Bump `IDL_VERSION`** in `fastrpc_test.idl` whenever a method is added,
   removed, or its signature changes.  The skel performs a version check at
   `open()` time and returns `AEE_ESTUBSKELVERMISMATCH` on mismatch.
-- **DSP implementations** in `fastrpc_test_imp.c` must use only
-  `stdlib` / `string.h` / `math.h` / `clock_gettime()`.  No HAP or QuRT APIs.
+- DSP implementations should use only the APIs required by the interface and
+  the target SDK used by the selected sample.
 
 ### CMake rules
 
