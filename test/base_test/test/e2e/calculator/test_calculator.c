@@ -13,35 +13,20 @@ TEST_GROUP(CalculatorE2E);
 
 static test_e2e_session_t calculator_session;
 
-static int calculator_open(void)
-{
-    return test_e2e_session_open(&calculator_session);
-}
-
-static int calculator_close(void)
-{
-    return test_e2e_session_close(&calculator_session);
-}
-
-static remote_handle64 calculator_handle(void)
-{
-    return calculator_session.handle;
-}
-
 TEST_SETUP(CalculatorE2E)
 {
     int ret = test_utils_setup_test("calculator");
     if (ret != AEE_SUCCESS)
         TEST_IGNORE_MESSAGE("FastRPC test setup failed");
 
-    ret = calculator_open();
+    ret = test_e2e_session_open(&calculator_session);
     if (ret != AEE_SUCCESS)
         TEST_IGNORE_MESSAGE("calculator DSP service is unavailable");
 }
 
 TEST_TEAR_DOWN(CalculatorE2E)
 {
-    int ret = calculator_close();
+    int ret = test_e2e_session_close(&calculator_session);
 
     TEST_ASSERT_EQUAL_HEX32(AEE_SUCCESS, ret);
 }
@@ -52,13 +37,13 @@ TEST(CalculatorE2E, SumAndMaximum)
     int64_t sum = 0;
     int maximum = 0;
 
-    int ret = fastrpc_test_calculator_sum(calculator_handle(), values,
+    int ret = fastrpc_test_calculator_sum(calculator_session.handle, values,
                                           (int)(sizeof(values) / sizeof(values[0])), &sum);
     REPORT_ERROR_CODE(ret);
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(AEE_SUCCESS, ret, "calculator_sum");
     TEST_ASSERT_EQUAL_INT64(8, sum);
 
-    ret = fastrpc_test_calculator_max(calculator_handle(), values,
+    ret = fastrpc_test_calculator_max(calculator_session.handle, values,
                                       (int)(sizeof(values) / sizeof(values[0])), &maximum);
     REPORT_ERROR_CODE(ret);
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(AEE_SUCCESS, ret, "calculator_max");
@@ -72,11 +57,11 @@ TEST(CalculatorE2E, EmptyInputsAreRejected)
 {
     int64_t sum = 0;
     int maximum = 0;
-    int ret = fastrpc_test_calculator_sum(calculator_handle(), NULL, 1, &sum);
+    int ret = fastrpc_test_calculator_sum(calculator_session.handle, NULL, 1, &sum);
     REPORT_ERROR_CODE(ret);
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(AEE_EBADPARM, ret, "calculator_sum invalid input");
 
-    ret = fastrpc_test_calculator_max(calculator_handle(), NULL, 0, &maximum);
+    ret = fastrpc_test_calculator_max(calculator_session.handle, NULL, 0, &maximum);
     REPORT_ERROR_CODE(ret);
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(AEE_EBADPARM, ret, "calculator_max invalid input");
 }

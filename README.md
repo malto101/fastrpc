@@ -195,8 +195,8 @@ machine. The configured build exposes `make base-test` and
 `make base-test-clean`; the root target builds `src/.libs/libcdsprpc.so`
 first, then configures and builds the standalone CMake project. Artifacts are
 written to `test/base_test/builddir/bin/` (the AArch64 host `fastrpc_test`
-runner and, when the Hexagon toolchain is available, the DSP
-`libfastrpc_test_skel.so`), with QAIC-generated sources under
+runner and the DSP `libfastrpc_test_skel.so`), with QAIC-generated sources
+under
 `test/base_test/builddir/idl/generated/`. Remove the CMake build directory
 with `make distclean` before changing compilers or platform settings so stale
 CMake cache entries cannot select an old toolchain.

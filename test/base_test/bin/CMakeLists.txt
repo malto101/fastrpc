@@ -220,7 +220,6 @@ set_property(TARGET fastrpc_test APPEND PROPERTY LINK_DEPENDS
 
 target_include_directories(fastrpc_test PRIVATE
     "${CMAKE_SOURCE_DIR}"
-    "${CMAKE_SOURCE_DIR}/test/feature"
     "${FASTRPC_TEST_IDL_INC_DIR}"
 )
 
