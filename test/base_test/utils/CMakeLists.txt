@@ -11,7 +11,7 @@
 set(_utils_all_inc
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/fastrpc_utils"
-    "${CMAKE_CURRENT_SOURCE_DIR}/reporting/unity"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_runner"
     "${FASTRPC_TEST_IDL_INC_DIR}"
     "${FASTRPC_INC_DIR}"
     "${CMAKE_SOURCE_DIR}/vendor/unity/src"
@@ -23,7 +23,7 @@ set(_utils_all_inc
 # fastrpc_test_utils
 # ----------------------------------------------------------------------------
 add_library(fastrpc_test_utils STATIC
-    reporting/unity/unity_fixture_file_output.c
+    test_runner/base_test_runner.c
     fastrpc_utils/test_config.c
     fastrpc_utils/test_domain.c
     fastrpc_utils/test_error.c
@@ -58,5 +58,5 @@ target_link_libraries(utils_dep INTERFACE
 target_include_directories(utils_dep INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/fastrpc_utils"
-    "${CMAKE_CURRENT_SOURCE_DIR}/reporting/unity"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_runner"
 )

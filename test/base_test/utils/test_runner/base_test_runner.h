@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 /**
- * @file unity_fixture_file_output.h
- * @brief Unity Fixture integration for formatted output and test metadata.
+ * @file base_test_runner.h
+ * @brief Base-test runner integration for formatted output and test metadata.
  */
 
-#ifndef UNITY_FIXTURE_FILE_OUTPUT_H
-#define UNITY_FIXTURE_FILE_OUTPUT_H
+#ifndef BASE_TEST_RUNNER_H
+#define BASE_TEST_RUNNER_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,17 +20,19 @@ extern "C" {
 #ifdef UnityTestRunner
 #undef UnityTestRunner
 #endif
-#define UnityTestRunner UnityTestRunnerWithFileOutput
+#define UnityTestRunner BaseTestRunnerRunTest
 
-int UnityFixtureFileOutputBegin(const char *output_dir, const char *base_name);
-int UnityFixtureFileOutputEnd(void);
+int BaseTestRunnerBegin(void);
+int BaseTestRunnerEnd(void);
 
-void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_body,
-                                   unityfunction *teardown, const char *printable_name,
-                                   const char *group, const char *name, const char *file,
-                                   unsigned int line);
+void BaseTestRunnerRunTest(unityfunction *setup, unityfunction *test_body,
+                           unityfunction *teardown, const char *printable_name,
+                           const char *group, const char *name, const char *file,
+                           unsigned int line);
 
-int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(void));
+int BaseTestRunnerMain(int argc, const char *argv[], void (*run_all_tests)(void));
+
+/* Domain output remains part of the base-test runner's console reporting. */
 void unity_test_case_set_summary(unsigned int total, unsigned int failures,
                                  unsigned int ignored);
 void unity_test_case_print_domain_begin(const char *domain_name, int domain_id);
@@ -156,4 +158,4 @@ int unity_test_case_registry_print_tags(void);
 }
 #endif
 
-#endif /* UNITY_FIXTURE_FILE_OUTPUT_H */
+#endif /* BASE_TEST_RUNNER_H */
