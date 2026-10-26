@@ -141,6 +141,33 @@ git submodule update --init --recursive
 
 ---
 
+## Integrated build from the FastRPC root
+
+The recommended developer workflow is an opt-in root build. It keeps the
+normal FastRPC build independent of CMake and QAIC, but builds the library
+before configuring this suite and forwards the resulting paths automatically:
+
+```bash
+cd /path/to/fastrpc
+git submodule update --init --recursive
+./gitcompile --enable-base-test \
+  --with-qaic=/path/to/qaic \
+  --with-dsp-arch=73
+```
+
+The same command accepts `--host=aarch64-linux-gnu` or
+`--host=aarch64-linux-android` for the corresponding target. After
+configuration, use `make base-test` to rebuild only the library dependency and
+base-test, `make base-test-clean` to remove its CMake build directory, and
+`make distclean` when changing compilers or target platforms so CMake's cache
+is discarded. The integrated build writes the host runner to
+`test/base_test/builddir/bin/fastrpc_test`, the optional DSP skeleton to
+`test/base_test/builddir/bin/libfastrpc_test_skel.so`, and QAIC output under
+`test/base_test/builddir/idl/generated/`.
+
+`--enable-base-test` is disabled by default. QAIC, CMake, the Unity submodule,
+and the AArch64 target are validated only when it is enabled.
+
 ## Step 1 — Build the fastrpc library
 
 `base_test` links against `libcdsprpc.so` from the fastrpc repository root.

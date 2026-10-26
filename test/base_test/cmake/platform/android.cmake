@@ -40,24 +40,39 @@ message(STATUS "Android NDK bin dir: ${_ndk_bin}")
 # API level 35 is encoded in the compiler wrapper name:
 #   aarch64-linux-android35-clang
 # ----------------------------------------------------------------------------
-set(CMAKE_C_COMPILER   "${_ndk_bin}/aarch64-linux-android35-clang")
-set(CMAKE_CXX_COMPILER "${_ndk_bin}/aarch64-linux-android35-clang++")
-set(CMAKE_AR           "${_ndk_bin}/llvm-ar"     CACHE FILEPATH "Archiver")
-set(CMAKE_RANLIB       "${_ndk_bin}/llvm-ranlib"  CACHE FILEPATH "Ranlib")
-set(CMAKE_LINKER       "${_ndk_bin}/ld.lld"       CACHE FILEPATH "Linker")
-set(CMAKE_STRIP        "${_ndk_bin}/llvm-strip"   CACHE FILEPATH "Strip")
+# Preserve tools forwarded by the Autotools build.  These NDK wrappers are
+# defaults for standalone CMake invocations only.
+if(NOT DEFINED CMAKE_C_COMPILER AND NOT DEFINED ENV{CC})
+    set(CMAKE_C_COMPILER "${_ndk_bin}/aarch64-linux-android35-clang")
+endif()
+if(NOT DEFINED CMAKE_CXX_COMPILER AND NOT DEFINED ENV{CXX})
+    set(CMAKE_CXX_COMPILER "${_ndk_bin}/aarch64-linux-android35-clang++")
+endif()
+if(NOT DEFINED CMAKE_AR AND NOT DEFINED ENV{AR})
+    set(CMAKE_AR "${_ndk_bin}/llvm-ar" CACHE FILEPATH "Archiver")
+endif()
+if(NOT DEFINED CMAKE_RANLIB AND NOT DEFINED ENV{RANLIB})
+    set(CMAKE_RANLIB "${_ndk_bin}/llvm-ranlib" CACHE FILEPATH "Ranlib")
+endif()
+if(NOT DEFINED CMAKE_LINKER AND NOT DEFINED ENV{LD})
+    set(CMAKE_LINKER "${_ndk_bin}/ld.lld" CACHE FILEPATH "Linker")
+endif()
+if(NOT DEFINED CMAKE_STRIP AND NOT DEFINED ENV{STRIP})
+    set(CMAKE_STRIP "${_ndk_bin}/llvm-strip" CACHE FILEPATH "Strip")
+endif()
+
+if(NOT DEFINED ENV{CFLAGS})
+    set(CMAKE_C_FLAGS_INIT "-DANDROID")
+endif()
+if(NOT DEFINED ENV{LDFLAGS})
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "-pie")
+endif()
 
 # ----------------------------------------------------------------------------
 # System identity
 # ----------------------------------------------------------------------------
 set(CMAKE_SYSTEM_NAME      Android)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
-
-# ----------------------------------------------------------------------------
-# Compile / link flags
-# ----------------------------------------------------------------------------
-set(CMAKE_C_FLAGS_INIT          "-DANDROID")
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-pie")
 
 # ----------------------------------------------------------------------------
 # Sysroot search behaviour

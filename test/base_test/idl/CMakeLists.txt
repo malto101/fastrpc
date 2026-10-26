@@ -60,6 +60,11 @@ target_compile_definitions(fastrpc_test_stub PRIVATE
     ${PLATFORM_C_DEFS}
 )
 
+# QAIC emits aggregate initializers that trigger -Wmissing-braces with GCC.
+# Keep the suite's -Werror policy for handwritten tests while silencing this
+# warning only for the generated CPU stub.
+target_compile_options(fastrpc_test_stub PRIVATE -Wno-missing-braces)
+
 set(FASTRPC_TEST_IDL_INC_DIR "${_idl_output_dir}" PARENT_SCOPE)
 set(FASTRPC_TEST_IDL_HEADER "${_idl_header}" PARENT_SCOPE)
 set(FASTRPC_TEST_SKEL_SOURCE "${_idl_skel}" PARENT_SCOPE)

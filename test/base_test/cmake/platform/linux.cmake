@@ -17,23 +17,41 @@ set(CMAKE_SYSTEM_PROCESSOR aarch64)
 # ----------------------------------------------------------------------------
 # Toolchain binaries.
 # ----------------------------------------------------------------------------
-set(CMAKE_C_COMPILER   clang)
-set(CMAKE_CXX_COMPILER clang++)
-set(CMAKE_AR           llvm-ar    CACHE FILEPATH "Archiver")
-set(CMAKE_RANLIB       llvm-ranlib CACHE FILEPATH "Ranlib")
-set(CMAKE_LINKER       ld.lld     CACHE FILEPATH "Linker")
-set(CMAKE_STRIP        llvm-strip  CACHE FILEPATH "Strip")
+# Preserve compiler/tool selections forwarded by the Autotools build.  These
+# defaults apply only to standalone CMake invocations.
+set(_base_test_external_toolchain FALSE)
+if(DEFINED CMAKE_C_COMPILER OR DEFINED ENV{CC})
+    set(_base_test_external_toolchain TRUE)
+endif()
+if(NOT DEFINED CMAKE_C_COMPILER AND NOT DEFINED ENV{CC})
+    set(CMAKE_C_COMPILER clang)
+endif()
+if(NOT DEFINED CMAKE_CXX_COMPILER AND NOT DEFINED ENV{CXX})
+    set(CMAKE_CXX_COMPILER clang++)
+endif()
+if(NOT DEFINED CMAKE_AR AND NOT DEFINED ENV{AR})
+    set(CMAKE_AR llvm-ar CACHE FILEPATH "Archiver")
+endif()
+if(NOT DEFINED CMAKE_RANLIB AND NOT DEFINED ENV{RANLIB})
+    set(CMAKE_RANLIB llvm-ranlib CACHE FILEPATH "Ranlib")
+endif()
+if(NOT DEFINED CMAKE_LINKER AND NOT DEFINED ENV{LD})
+    set(CMAKE_LINKER ld.lld CACHE FILEPATH "Linker")
+endif()
+if(NOT DEFINED CMAKE_STRIP AND NOT DEFINED ENV{STRIP})
+    set(CMAKE_STRIP llvm-strip CACHE FILEPATH "Strip")
+endif()
 
-# ----------------------------------------------------------------------------
-# Compile and link flags.
-#
-# --target=aarch64-linux-gnu is the clang way to specify the cross triple.
-# Equivalent to CC="clang --target=aarch64-linux-gnu" in the old Makefile.
-# _INIT variables are set before project() runs so they seed the cache
-# without overwriting flags the user may add later.
-# ----------------------------------------------------------------------------
-set(CMAKE_C_FLAGS_INIT          "--target=aarch64-linux-gnu")
-set(CMAKE_EXE_LINKER_FLAGS_INIT "--target=aarch64-linux-gnu")
+# Standalone clang builds need an explicit target triple.  Never add this
+# Clang-only flag to a compiler supplied by Autotools (for example GCC).
+if(NOT _base_test_external_toolchain)
+    set(CMAKE_C_FLAGS_INIT "--target=aarch64-linux-gnu")
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "--target=aarch64-linux-gnu")
+endif()
+unset(_base_test_external_toolchain)
+
+# Caller-provided CFLAGS/LDFLAGS arrive through the environment and take
+# precedence over these standalone defaults.
 
 # ----------------------------------------------------------------------------
 # Sysroot search behaviour

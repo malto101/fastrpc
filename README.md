@@ -175,6 +175,35 @@ sudo ldconfig              # Update dynamic linker cache
 sudo systemd-sysusers      # Create fastrpc group
 ```
 
+### Build the opt-in base_test suite with FastRPC
+
+The normal `./gitcompile` command builds FastRPC only. When CMake, QAIC, the
+Unity submodule, and an AArch64 target toolchain are available, the base-test
+suite can be connected to the same build with:
+
+```bash
+git submodule update --init --recursive
+./gitcompile --enable-base-test \
+  --with-qaic=/path/to/qaic \
+  --with-dsp-arch=73
+```
+
+Use `--host=aarch64-linux-gnu` or `--host=aarch64-linux-android` for the
+corresponding target. The configured build exposes `make base-test` and
+`make base-test-clean`; the root target builds `src/.libs/libcdsprpc.so`
+first, then configures and builds the standalone CMake project. Artifacts are
+written to `test/base_test/builddir/bin/` (the host `fastrpc_test` runner and,
+when Hexagon clang is available, `libfastrpc_test_skel.so`), with QAIC-generated
+sources under `test/base_test/builddir/idl/generated/`. Remove the CMake build
+directory with `make distclean` before changing compiler or platform settings
+so stale CMake cache entries cannot select an old toolchain.
+
+QAIC and CMake are required only with `--enable-base-test`; ordinary FastRPC
+builds do not probe for either dependency.
+
+The CMake suite remains independently buildable; see
+`test/base_test/README.md` for standalone options and deployment instructions.
+
 ### Steps to cross-compile the project on Ubuntu
 
 1. **Install the cross compiler and required dependencies:**
