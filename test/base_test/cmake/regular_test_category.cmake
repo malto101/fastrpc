@@ -162,7 +162,10 @@ function(base_test_add_category)
 
     set(_dispatch_source
         "${CMAKE_CURRENT_BINARY_DIR}/${_CATEGORY_CATEGORY}_category_dispatch.c")
-    file(GENERATE OUTPUT "${_dispatch_source}" CONTENT "${_dispatcher}")
+    # Write at configure time rather than using file(GENERATE).  The generated
+    # dispatcher is a source input, so it must still exist after a clean build
+    # removes the binary directory contents.
+    file(WRITE "${_dispatch_source}" "${_dispatcher}")
 
     set(_suite_libs)
     foreach(_suite IN LISTS _suite_names)
