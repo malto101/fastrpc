@@ -175,6 +175,45 @@ sudo ldconfig              # Update dynamic linker cache
 sudo systemd-sysusers      # Create fastrpc group
 ```
 
+### Build the opt-in base_test suite with FastRPC
+
+The normal `./gitcompile` command builds FastRPC only. The base-test host
+runner is an AArch64 target binary, so an integrated cross-build must identify
+an AArch64 host target explicitly. For Linux GNU:
+
+```bash
+git submodule update --init --recursive
+./gitcompile --host=aarch64-linux-gnu --enable-base-test \
+  --with-qaic=/path/to/qaic \
+  --with-dsp-arch=73
+make base-test
+```
+
+Use `--host=aarch64-linux-android` for an AArch64 Android build, or omit
+`--host` only when running the complete build natively on an AArch64 Linux
+machine. The configured build exposes `make base-test` and
+`make base-test-clean`; the root target builds `src/.libs/libcdsprpc.so`
+first, then configures and builds the standalone CMake project. Artifacts are
+written to `test/base_test/builddir/bin/` (the AArch64 host `fastrpc_test`
+runner and, when the Hexagon toolchain is available, the DSP
+`libfastrpc_test_skel.so`), with QAIC-generated sources under
+`test/base_test/builddir/idl/generated/`. Remove the CMake build directory
+with `make distclean` before changing compilers or platform settings so stale
+CMake cache entries cannot select an old toolchain.
+
+A complete device build also requires an executable Hexagon compiler and
+linker, supplied through the standalone CMake options
+`-DHEXAGON_CLANG=/path/to/hexagon-clang` and
+`-DHEXAGON_LD=/path/to/ld.lld`, plus a device-compatible `DSP_ARCH`. The
+integrated target uses tool lookup; use the standalone instructions in
+[`test/base_test/README.md`](test/base_test/README.md) when those paths must
+be explicit. QAIC and CMake are required only with `--enable-base-test`;
+ordinary FastRPC builds do not probe for either dependency.
+
+The CMake suite remains independently buildable; see
+`test/base_test/README.md` for standalone options, deployment, CLI, and
+troubleshooting instructions.
+
 ### Steps to cross-compile the project on Ubuntu
 
 1. **Install the cross compiler and required dependencies:**
