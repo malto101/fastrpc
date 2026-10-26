@@ -238,8 +238,15 @@ set(UNITY_EXTENSION_MEMORY ON CACHE BOOL
     "Build Unity with the memory extension" FORCE)
 add_subdirectory(vendor/unity EXCLUDE_FROM_ALL)
 
-set(UNITY_COMPILE_DEFS UNITY_OUTPUT_COLOR UNITY_INCLUDE_PRINT_FORMATTED)
+set(UNITY_COMPILE_DEFS
+    UNITY_INCLUDE_PRINT_FORMATTED
+    UNITY_OUTPUT_CHAR=fastrpc_unity_output_char
+    UNITY_OUTPUT_CHAR_HEADER_DECLARATION=fastrpc_unity_output_char\(int\))
 target_compile_definitions(unity PUBLIC ${UNITY_COMPILE_DEFS})
+target_compile_definitions(unity PRIVATE ${UNITY_COMPILE_DEFS})
+# The custom reporter provides fastrpc_unity_output_char(). Keep Unity's
+# output callback shared by the framework and the test-side wrapper so Unity
+# lifecycle output can be suppressed without redirecting test stdout.
 
 add_library(unity_dep INTERFACE)
 target_link_libraries(unity_dep INTERFACE unity)

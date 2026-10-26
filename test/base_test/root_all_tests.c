@@ -46,6 +46,7 @@ static int run_base_tests(int argc, const char *argv[])
                 "FastRPC base tests\n\n"
                 "  -d DOMAIN         select a DSP domain (repeatable)\n"
                 "  -u 0|1            disable/enable unsigned PD\n"
+                "  -v               show passing-test output\n"
                 "  --silent          suppress passing-test output\n"
                 "  --any-tags TAG    select tests matching any tag\n"
                 "  --all-tags TAG    select tests matching all tags\n"
@@ -98,8 +99,12 @@ static int run_base_tests(int argc, const char *argv[])
         summary_total += Unity.NumberOfTests;
         summary_failures += Unity.TestFailures;
         summary_ignored += Unity.TestIgnores;
+        unity_test_case_print_domain_summary(domain_name, g_test_config.domain_id,
+                                              Unity.NumberOfTests, Unity.TestFailures,
+                                              Unity.TestIgnores);
         unity_test_case_dispatch_reset();
-        result += domain_result;
+        if (domain_result != 0)
+            result = 1;
     }
 
     unity_test_case_set_summary(summary_total, summary_failures, summary_ignored);

@@ -225,14 +225,8 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
             }
             unsigned_pd_explicit = 1;
         } else if (strcmp(argv[i], "--silent") == 0) {
-            /*
-             * --silent  — suppress the per-test header/dot/footer block for
-             * tests that pass; failed and skipped tests still print their
-             * full block. Implemented by buffering each test's stdout output
-             * and discarding it on a pass (see UnityTestRunnerWithFileOutput
-             * in unity_fixture_file_output.c). Consumed here; never
-             * forwarded to UnityMain().
-             */
+            /* --silent suppresses custom output for passing tests. It is
+             * consumed here and never forwarded to UnityMain(). */
             g_test_config.silent_mode = 1;
             UnityFixture.Silent = 1;
             silent_explicit = 1;

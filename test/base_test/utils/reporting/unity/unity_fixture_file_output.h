@@ -33,6 +33,9 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
 int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(void));
 void unity_test_case_set_summary(unsigned int total, unsigned int failures,
                                  unsigned int ignored);
+void unity_test_case_print_domain_summary(const char *domain_name, int domain_id,
+                                          unsigned int total, unsigned int failures,
+                                          unsigned int ignored);
 
 #if defined(__GNUC__) || defined(__clang__)
 #define UNITY_METADATA_CONSTRUCTOR __attribute__((constructor))

@@ -1,6 +1,7 @@
 // Copyright (c) Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
+#include "../../fastrpc_utils/test_config.h"
 #include "../../fastrpc_utils/test_utils.h"
 #include "unity_fixture.h"           /* Include to get Unity types */
 #include "unity_fixture_internals.h" /* For UnityFixture (GroupFilter/Group/NameFilter/Name) */
@@ -15,33 +16,23 @@
 #define SIZE_MAX ((size_t)-1)
 #endif
 
-/* ANSI colour codes -- only emitted when stdout is a tty (see use_color()). */
-#define CLR_RESET "\033[0m"
-#define CLR_BOLD "\033[1m"
-#define CLR_DIM "\033[2m"
-#define CLR_GREEN "\033[32m"
-#define CLR_RED "\033[31m"
-#define CLR_YELLOW "\033[33m"
-#define CLR_CYAN "\033[36m"
-#define CLR_BGREEN "\033[1;32m"
-#define CLR_BRED "\033[1;31m"
-#define CLR_BYELLOW "\033[1;33m"
-#define CLR_BCYAN "\033[1;36m"
-#define CLR_BWHITE "\033[1;37m"
+#define TEST_OUTPUT_SEPARATOR "----------------------------------------------"
 
-/* Box inner width: total terminal columns minus the two border characters. */
-#define BOX_INNER 77 /* fits inside an 80-column terminal: │<77 chars>│ */
+/* Unity uses this callback for framework-owned output. Keeping it separate
+ * from stdout writes in test bodies lets the reporter suppress duplicate
+ * Unity progress and summaries without capturing test diagnostics. */
+static int suppress_unity_output;
+static int file_output_active;
+static int s_show_pass_results;
+static unsigned int s_summary_total;
+static unsigned int s_summary_failures;
+static unsigned int s_summary_ignored;
 
-static int use_color(void)
+void fastrpc_unity_output_char(int character)
 {
-    static int cached = -1;
-    if (cached == -1)
-        cached = isatty(STDOUT_FILENO) ? 1 : 0;
-    return cached;
+    if (!suppress_unity_output)
+        (void)putchar(character);
 }
-
-/* Convenience wrappers: emit the escape string only when colour is on. */
-#define COLOR(esc) (use_color() ? (esc) : "")
 
 /* Strips everything up to and including "fastrpc-test/" for display.
  * Falls back to the last two path components for out-of-tree builds. */
@@ -58,7 +49,6 @@ static const char *shorten_path(const char *path)
     if (marker)
         return marker + strlen("fastrpc-test/");
 
-    /* Fallback: return the last two path components. */
     last_slash = strrchr(path, '/');
     if (last_slash && last_slash != path) {
         prev = last_slash - 1;
@@ -72,59 +62,21 @@ static const char *shorten_path(const char *path)
 
 static void print_suite_banner(const char *suite_name)
 {
-    int i, title_len, left_pad, right_pad;
     const char *title = (suite_name && suite_name[0] != '\0') ? suite_name : "FastRPC Test Suite";
 
-    title_len = (int)strlen(title);
-    left_pad = (BOX_INNER - title_len) / 2;
-    right_pad = BOX_INNER - title_len - left_pad;
-
-    printf("\n");
-    printf("%s╔", COLOR(CLR_BCYAN));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("═");
-    printf("╗%s\n", COLOR(CLR_RESET));
-
-    printf("%s║%s", COLOR(CLR_BCYAN), COLOR(CLR_RESET));
-    for (i = 0; i < left_pad; i++)
-        printf(" ");
-    printf("%s%s%s", COLOR(CLR_BWHITE), title, COLOR(CLR_RESET));
-    for (i = 0; i < right_pad; i++)
-        printf(" ");
-    printf("%s║%s\n", COLOR(CLR_BCYAN), COLOR(CLR_RESET));
-
-    printf("%s╚", COLOR(CLR_BCYAN));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("═");
-    printf("╝%s\n\n", COLOR(CLR_RESET));
+    printf("%s\n\n", title);
     fflush(stdout);
 }
 
 static void print_test_header(const char *group, const char *name)
 {
-    int i;
-    char label[512];
-
-    snprintf(label, sizeof(label), "  TEST  %s :: %s", group, name);
-    label[BOX_INNER] = '\0';
-
-    printf("%s┌", COLOR(CLR_DIM));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("─");
-    printf("┐%s\n", COLOR(CLR_RESET));
-
-    printf("%s│%s%s%-*s%s%s│%s\n", COLOR(CLR_DIM), COLOR(CLR_RESET), COLOR(CLR_BWHITE), BOX_INNER,
-           label, COLOR(CLR_RESET), COLOR(CLR_DIM), COLOR(CLR_RESET));
-
-    printf("%s└", COLOR(CLR_DIM));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("─");
-    printf("┘%s\n", COLOR(CLR_RESET));
+    printf("%s\n", TEST_OUTPUT_SEPARATOR);
+    printf("GROUP: %s\n", group ? group : "(unknown)");
+    printf("TEST: %s\n", name ? name : "(unknown)");
+    printf("%s\n", TEST_OUTPUT_SEPARATOR);
     fflush(stdout);
 }
 
-/* Prints error codes (run-length encoded), result (PASS/FAIL/SKIP),
- * and for failures: location and word-wrapped message. */
 static void print_test_footer(int passed, int ignored, const char *file, unsigned int fail_line,
                               const char *message, const int *codes, int code_count,
                               int codes_truncated)
@@ -133,75 +85,39 @@ static void print_test_footer(int passed, int ignored, const char *file, unsigne
         int i;
         int first = 1;
 
-        printf("  %sError codes :%s ", COLOR(CLR_DIM), COLOR(CLR_RESET));
-
+        printf("Error code: ");
         for (i = 0; i < code_count;) {
             int val = codes[i];
             int run = 1;
 
             while (i + run < code_count && codes[i + run] == val)
                 run++;
-
             if (!first)
-                printf("%s, %s", COLOR(CLR_DIM), COLOR(CLR_RESET));
-
-            printf("%s0x%08x%s %s(%s)%s", COLOR(CLR_CYAN), (unsigned int)val, COLOR(CLR_RESET),
-                   COLOR(CLR_DIM), test_utils_err_str(val), COLOR(CLR_RESET));
-
+                printf(", ");
+            printf("0x%08x (%s)", (unsigned int)val, test_utils_err_str(val));
             if (run > 1)
-                printf(" %s\xc3\x97%d%s", /* UTF-8 multiplication sign ×N */
-                       COLOR(CLR_DIM), run, COLOR(CLR_RESET));
-
+                printf(" x%d", run);
             first = 0;
             i += run;
         }
         printf("\n");
+    } else if (codes_truncated) {
+        printf("Error code: truncated\n");
     }
-    if (codes_truncated)
-        printf("  %sError codes truncated%s\n", COLOR(CLR_YELLOW), COLOR(CLR_RESET));
-
-    if (codes_truncated || code_count > 0)
-        printf("\n");
 
     if (ignored) {
-        printf("  %sResult      :%s %s\xe2\x8a\x98 SKIP%s\n", /* ⊘ */
-               COLOR(CLR_DIM), COLOR(CLR_RESET), COLOR(CLR_BYELLOW), COLOR(CLR_RESET));
+        printf("Result: SKIP\n");
     } else if (passed) {
-        printf("  %sResult      :%s %s\xe2\x9c\x94 PASS%s\n", /* ✔ */
-               COLOR(CLR_DIM), COLOR(CLR_RESET), COLOR(CLR_BGREEN), COLOR(CLR_RESET));
+        printf("Result: PASS\n");
     } else {
-        printf("  %sResult      :%s %s\xe2\x9c\x98 FAIL%s\n", /* ✘ */
-               COLOR(CLR_DIM), COLOR(CLR_RESET), COLOR(CLR_BRED), COLOR(CLR_RESET));
-
-        if (file && file[0] != '\0') {
-            printf("  %sLocation    :%s %s%s:%u%s\n", COLOR(CLR_DIM), COLOR(CLR_RESET),
-                   COLOR(CLR_YELLOW), shorten_path(file), fail_line, COLOR(CLR_RESET));
-        }
-
-        if (message && message[0] != '\0') {
-            const int wrap_col = BOX_INNER - 16;
-            const int cont_ind = 20;
-            int col = 0;
-            const char *p = message;
-
-            printf("  %sMessage     :%s ", COLOR(CLR_DIM), COLOR(CLR_RESET));
-
-            while (*p) {
-                if (col >= wrap_col && *p == ' ') {
-                    printf("\n%*s", cont_ind, "");
-                    col = 0;
-                    p++;
-                    continue;
-                }
-                putchar((unsigned char)*p);
-                col++;
-                p++;
-            }
-            printf("\n");
-        }
+        printf("Result: FAIL\n");
+        if (file && file[0] != '\0')
+            printf("Location: %s:%u\n", shorten_path(file), fail_line);
+        if (message && message[0] != '\0')
+            printf("Message: %s\n", message);
     }
 
-    printf("\n");
+    printf("%s\n", TEST_OUTPUT_SEPARATOR);
     fflush(stdout);
 }
 
@@ -223,63 +139,45 @@ static void print_test_outcome(const unity_test_outcome_t *outcome)
                       outcome->error_count, outcome->error_codes_truncated);
 }
 
-static void print_summary(uint32_t total, uint32_t failures, uint32_t ignored)
+static unsigned int count_passed(unsigned int total, unsigned int failures,
+                                 unsigned int ignored)
 {
-    uint32_t passed = failures + ignored >= total ? 0 : total - failures - ignored;
-    int has_failures = failures != 0;
-    int has_ignored = ignored != 0;
-    int i;
-    char counts[256];
-    int visible_len;
+    if (failures > total || ignored > total - failures)
+        return 0;
+    return total - failures - ignored;
+}
 
-    printf("\n");
+static void print_summary(const char *title, const char *domain_name, int domain_id,
+                          unsigned int total, unsigned int failures, unsigned int ignored)
+{
+    unsigned int passed = count_passed(total, failures, ignored);
 
-    printf("%s┌", COLOR(CLR_BOLD));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("─");
-    printf("┐%s\n", COLOR(CLR_RESET));
-
-    printf("%s│  TEST SUITE SUMMARY%-*s│%s\n", COLOR(CLR_BOLD), BOX_INNER - 20, "",
-           COLOR(CLR_RESET));
-
-    printf("%s├", COLOR(CLR_BOLD));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("─");
-    printf("┤%s\n", COLOR(CLR_RESET));
-
-    visible_len
-        = snprintf(counts, sizeof(counts), "  Total: %u   Passed: %u   Failed: %u   Skipped: %u",
-                   total, passed, failures, ignored);
-
-    printf("%s│%s"
-           "  Total: %u   "
-           "%sPassed: %u%s   "
-           "%sFailed: %u%s   "
-           "%sSkipped: %u%s"
-           "%*s"
-           "%s│%s\n",
-           COLOR(CLR_BOLD), COLOR(CLR_RESET), total, COLOR(CLR_BGREEN), passed, COLOR(CLR_RESET),
-           has_failures ? COLOR(CLR_BRED) : COLOR(CLR_BGREEN), failures, COLOR(CLR_RESET),
-           has_ignored ? COLOR(CLR_BYELLOW) : COLOR(CLR_DIM), ignored, COLOR(CLR_RESET),
-           BOX_INNER - visible_len, "", COLOR(CLR_BOLD), COLOR(CLR_RESET));
-
-    printf("%s└", COLOR(CLR_BOLD));
-    for (i = 0; i < BOX_INNER; i++)
-        printf("─");
-    printf("┘%s\n", COLOR(CLR_RESET));
-
-    if (failures == 0 && ignored == 0) {
-        printf("\n%s  \xe2\x9c\x94  All %u tests passed.%s\n\n", /* ✔ */
-               COLOR(CLR_BGREEN), total, COLOR(CLR_RESET));
-    } else if (failures == 0) {
-        printf("\n%s  \xe2\x9c\x94  %u test(s) passed; %u skipped.%s\n\n", /* ✔ */
-               COLOR(CLR_BGREEN), passed, ignored, COLOR(CLR_RESET));
-    } else {
-        printf("\n%s  \xe2\x9c\x98  %u test(s) failed.%s\n\n", /* ✘ */
-               COLOR(CLR_BRED), failures, COLOR(CLR_RESET));
-    }
+    printf("\n%s\n", TEST_OUTPUT_SEPARATOR);
+    printf("%s\n", title);
+    if (domain_name)
+        printf("Domain: %s (%d)\n", domain_name, domain_id);
+    printf("Tests: %u\n", total);
+    printf("Passed: %u\n", passed);
+    printf("Failed: %u\n", failures);
+    printf("Skipped: %u\n", ignored);
+    printf("Result: %s\n", failures == 0 ? "PASS" : "FAIL");
+    printf("%s\n", TEST_OUTPUT_SEPARATOR);
     fflush(stdout);
 }
+
+static void print_overall_summary(unsigned int total, unsigned int failures,
+                                  unsigned int ignored)
+{
+    print_summary("OVERALL TEST SUITE SUMMARY", NULL, 0, total, failures, ignored);
+}
+
+void unity_test_case_print_domain_summary(const char *domain_name, int domain_id,
+                                          unsigned int total, unsigned int failures,
+                                          unsigned int ignored)
+{
+    print_summary("DOMAIN TEST SUMMARY", domain_name, domain_id, total, failures, ignored);
+}
+
 
 /* Declare the original UnityTestRunner function from unity_fixture.c */
 void UnityTestRunner(unityfunction *setup, unityfunction *test_body, unityfunction *teardown,
@@ -340,6 +238,7 @@ static int s_test_case_dispatch_invalid;
 static int is_test_selected(const char *group, const char *name);
 static int test_passes_unity_and_tags(const char *group, const char *name);
 static int test_passes_listing_filters(const unity_test_case_metadata_t *entry);
+static void print_metadata_skip(const char *group, const char *name);
 
 static int metadata_entry_compare(const void *left, const void *right)
 {
@@ -685,9 +584,39 @@ int unity_test_case_dispatch_validate(void)
 void unity_test_case_ignore(const char *printable_name, const char *group,
                            const char *name)
 {
-    if (!unity_test_case_selected(group, name))
+    if (!is_test_selected(group, name) || !unity_test_case_tag_filter_passes(group, name))
         return;
+    if (!unity_test_case_domain_supported(group, name, g_test_config.domain_id)) {
+        Unity.NumberOfTests++;
+        Unity.TestIgnores++;
+        print_metadata_skip(group, name);
+        return;
+    }
+
+    suppress_unity_output = 1;
     UnityIgnoreTest(printable_name, group, name);
+    suppress_unity_output = 0;
+    if (file_output_active) {
+        print_test_header(group, name);
+        printf("Result: SKIP\n");
+        printf("Reason: test is explicitly ignored\n");
+        printf("%s\n", TEST_OUTPUT_SEPARATOR);
+        fflush(stdout);
+    }
+}
+
+static void print_metadata_skip(const char *group, const char *name)
+{
+    print_test_header(group, name);
+    printf("Result: SKIP\n");
+    if (!unity_test_case_tag_filter_passes(group, name))
+        printf("Reason: test does not match the selected tag filters\n");
+    else if (!unity_test_case_domain_supported(group, name, g_test_config.domain_id))
+        printf("Reason: test is not supported by the selected domain\n");
+    else
+        printf("Reason: test is not selected\n");
+    printf("%s\n", TEST_OUTPUT_SEPARATOR);
+    fflush(stdout);
 }
 
 int unity_test_case_group_has_selected(const char *group)
@@ -825,7 +754,7 @@ int UnityFixtureFileOutputEnd(void)
         return 0;
     }
 
-    print_summary(s_summary_total, s_summary_failures, s_summary_ignored);
+    print_overall_summary(s_summary_total, s_summary_failures, s_summary_ignored);
 
     file_output_active = 0;
     return 0;
@@ -1067,23 +996,26 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
         return;
     }
 
-    if (!unity_test_case_selected(group, name)) {
+    if (!unity_test_case_tag_filter_passes(group, name))
+        return;
+    if (!unity_test_case_domain_supported(group, name, g_test_config.domain_id)) {
         Unity.NumberOfTests++;
         Unity.TestIgnores++;
+        print_metadata_skip(group, name);
         return;
     }
 
+    /* Metadata and Unity filters are checked separately so tag exclusions do
+     * not inflate the executed-test or skipped-test counters. */
     test_utils_reset_last_error_code();
     test_utils_reset_accumulated_error_codes();
     failures_before = Unity.TestFailures;
     ignores_before = Unity.TestIgnores;
 
-    if (!g_test_config.silent_mode)
-        print_test_header(group, name);
+    suppress_unity_output = 1;
     invoke_original_unity_test_runner(setup, test_body, teardown, printable_name, group, name,
                                       file, line);
-    if (!g_test_config.silent_mode)
-        putchar('\n');
+    suppress_unity_output = 0;
     fflush(stdout);
     test_ignored = Unity.TestIgnores > ignores_before;
     test_passed = Unity.TestFailures == failures_before && !test_ignored;
@@ -1101,7 +1033,10 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
             .error_count = code_count,
             .error_codes_truncated = test_utils_error_codes_truncated(),
         };
-        print_test_outcome(&outcome);
+        if (!test_passed || test_ignored || s_show_pass_results) {
+            print_test_header(group, name);
+            print_test_outcome(&outcome);
+        }
     }
 }
 
@@ -1116,6 +1051,12 @@ int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(
     result = UnityGetCommandLineOptions(argc, argv);
     if (result != 0)
         return result;
+
+    s_show_pass_results = UnityFixture.Verbose && !UnityFixture.Silent &&
+                          !g_test_config.silent_mode;
+    UnityFixture.Verbose = 0;
+    UnityFixture.Silent = 1;
+
     if (UnityFixture.RepeatCount == 0) {
         fprintf(stderr, "[unity] -r requires a repeat count greater than zero\n");
         UnityBegin(argv[0]);
@@ -1138,9 +1079,9 @@ int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(
         failures += Unity.TestFailures;
         ignored += Unity.TestIgnores;
         /* Close each Unity lifecycle while keeping the aggregate summary custom. */
+        suppress_unity_output = 1;
         (void)UnityEnd();
-        if (UnityFixture.Verbose)
-            UNITY_PRINT_EOL();
+        suppress_unity_output = 0;
         unity_test_case_set_summary(total, failures, ignored);
     }
 

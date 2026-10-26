@@ -209,6 +209,49 @@ library, host binary, domain, and `DSP_ARCH` must all belong to the same build.
 
 Run commands from `test/base_test`; the binary is `builddir/bin/fastrpc_test`.
 
+The custom runner output is plain ASCII text and is safe to redirect or pipe. It
+has no ANSI colour escapes, box-drawing characters, tables, or terminal-width
+dependencies. Passing result blocks are hidden by default; failures and skips
+remain visible. Use `-v` to include passing result blocks. `--silent` and `-s`
+keep passing blocks hidden, including when `-v` is supplied. Direct stdout and
+stderr written by test code are not captured or rewritten and may appear before
+the corresponding result block.
+
+Each selected domain produces one `DOMAIN TEST SUMMARY` containing its name and
+numeric ID. The final `OVERALL TEST SUITE SUMMARY` aggregates all selected
+domains and repeats and is printed once after the domain summaries.
+
+```text
+FastRPC Tests
+
+----------------------------------------------
+GROUP: Calculator
+TEST: SumAndMaximum
+Result: FAIL
+Location: test/e2e/calculator/test_calculator.c:42
+Message: expected 3, got 4
+----------------------------------------------
+
+----------------------------------------------
+DOMAIN TEST SUMMARY
+Domain: cdsp (3)
+Tests: 4
+Passed: 3
+Failed: 1
+Skipped: 0
+Result: FAIL
+----------------------------------------------
+
+----------------------------------------------
+OVERALL TEST SUITE SUMMARY
+Tests: 4
+Passed: 3
+Failed: 1
+Skipped: 0
+Result: FAIL
+----------------------------------------------
+```
+
 ```bash
 # Run on every running domain discovered from remoteproc and /dev/fastrpc-*.
 ./builddir/bin/fastrpc_test
@@ -245,14 +288,14 @@ are rejected; the legacy `test/fastrpc_test` options are a different runner.
 | `--list-tags` | Print all registered tags and exit. |
 | `--any-tags TAG` | OR filter: select a case matching at least one supplied tag. Repeatable, up to 32 values. |
 | `--all-tags TAG` | AND filter: select a case matching every supplied tag. Repeatable, up to 32 values. |
-| `--silent` | Suppress output for passing cases; failures and skips remain visible. |
+| `--silent` | Suppress custom output for passing cases; failures and skips remain visible. This overrides `-v`. |
 | `-g GROUP` | Select an exact Unity group name. |
 | `-G TEXT` | Select groups whose names contain `TEXT`. |
 | `-n CASE` | Select an exact Unity case name. |
 | `-N TEXT` | Select cases whose names contain `TEXT`. |
 | `-r COUNT` | Repeat the selected cases `COUNT` times; `COUNT` must be greater than zero. |
-| `-v` | Enable Unity verbose output. |
-| `-s` | Enable Unity silent output. Prefer `--silent` when using the base-test output summary. |
+| `-v` | Show custom result blocks for passing cases. |
+| `-s` | Suppress custom output for passing cases, like `--silent`. |
 | `-h`, `--help` | Print runner help and exit. |
 
 Tag matching is case-sensitive. When both tag filters are present, a test must
@@ -281,6 +324,13 @@ permission, or unavailable DSP service. Domain IDs outside this table are
 invalid for this snapshot.
 
 ### Expected status
+
+Name, group, and tag filters exclude non-matching cases without adding to the
+summary counters. A case that is selected but unsupported by the current domain
+is counted as skipped. `IGNORE_TEST` cases are also counted and shown as skips.
+Each domain summary includes every repeat for that domain, and the overall
+summary includes every selected domain and repeat. A run containing only skips
+has no failures and exits successfully.
 
 Each selected case contributes one of these outcomes:
 
