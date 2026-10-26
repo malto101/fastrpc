@@ -1,7 +1,7 @@
 # Copyright (c) Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Helpers for the regular (unit, feature, and E2E) base-test categories.
+# Helpers for the regular E2E base-test category.
 # Fuzz targets intentionally do not use this helper.
 
 include_guard(GLOBAL)

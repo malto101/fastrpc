@@ -19,19 +19,12 @@
 #include <string.h>
 #include <unistd.h>
 
-void run_unit_suite_tests(void);
-void run_feature_suite_tests(void);
 void run_e2e_suite_tests(void);
 
 static void run_all_tests(void)
 {
-    run_unit_suite_tests();
-    run_feature_suite_tests();
     run_e2e_suite_tests();
 }
-
-/* Generated category dispatchers remain callable when a category has no
- * suites; empty dispatchers preserve Unity setup and filtering. */
 
 static int parse_worker_value(const char **argv, int argc, int *index,
                               const char **value)

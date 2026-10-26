@@ -8,22 +8,19 @@ host-side emulator.
 The suite is intentionally opt-in for the normal Autotools build. The normal
 FastRPC build does not require CMake, QAIC, Unity, or a Hexagon compiler.
 
-Tests are organized by category under `test/base_test/test/`: `unit`, `feature`,
-and `e2e`. Each suite lives in a category-specific directory and provides an
-`all_tests.c` suite entry point alongside its `test_*.c` files. The entry point
-runs that suite's Unity groups; cases remain annotated with the shared metadata
-and reporting helpers. This category/suite contract keeps unit, feature, and
-E2E suites consistent while allowing each category to provide its own fixtures
-and dependencies.
+Tests are organized as E2E suites under `test/base_test/test/e2e/`. Each suite
+provides an `all_tests.c` suite entry point alongside its `test_*.c` files. The
+entry point runs that suite's Unity groups; cases remain annotated with the
+shared metadata and reporting helpers.
 
 E2E suites use the shared generated stub and skeleton. The calculator and HAP
 example suites exercise the common `idl/fastrpc_test.idl` interface. A target
 HAP/Hexagon SDK runtime is needed for the HAP operation on the DSP.
 
-Fuzzing is separate from the unit, feature, and E2E suite contract. Any fuzz
-harnesses or targets are opt-in and are not included in a normal `fastrpc_test`
-run. Build and run fuzzing only when it is an explicit goal; do not treat fuzz
-harnesses or corpora as ordinary test suites.
+Fuzzing is separate from the E2E suite contract. Any fuzz harnesses or targets
+are opt-in and are not included in a normal `fastrpc_test` run. Build and run
+fuzzing only when it is an explicit goal; do not treat fuzz harnesses or
+corpora as ordinary test suites.
 
 ## Prerequisites
 
@@ -320,24 +317,23 @@ For daemon and device setup details, see the root [daemon documentation](../../D
 
 ### Shared suite contract
 
-Unit, feature, and E2E tests use the same category/suite layout:
+E2E suites use this layout:
 
 ```text
-test/<category>/<suite_name>/
+test/e2e/<suite_name>/
 ├── all_tests.c
 └── test_*.c
 ```
 
-`<category>` is `unit`, `feature`, or `e2e`. `all_tests.c` is the suite
-manifest and entry point; it runs the Unity group runners defined by the
-suite's `test_*.c` files. The category determines the suite's purpose and
-fixtures, but not the layout. Keep one suite's groups and cases in that suite's
-directory, and use the shared metadata, reporting, and error-code helpers.
-The category build wiring is the source of truth for the suites that are built;
-there is no separate README inventory to keep synchronized.
+`all_tests.c` is the suite manifest and entry point; it runs the Unity group
+runners defined by the suite's `test_*.c` files. Keep one suite's groups and
+cases in that suite's directory, and use the shared metadata, reporting, and
+error-code helpers. The E2E category build wiring is the source of truth for
+the suites that are built; there is no separate README inventory to keep
+synchronized.
 
 Fuzz harnesses are outside this contract. Fuzzing is an explicit, opt-in
-workflow and must not be added to the unit, feature, or E2E suite run.
+workflow and must not be added to the E2E suite run.
 
 ### Add a case to an existing suite
 
@@ -356,14 +352,12 @@ state, and teardown must close a handle even after a body assertion fails.
 
 ### Add a new suite
 
-1. Create `test/<category>/<suite_name>/all_tests.c` and one or more
-   `test_*.c` files, where `<category>` is `unit`, `feature`, or `e2e`.
-2. Give the manifest the category-specific entry point:
-   `run_<suite_name>_tests()` for unit, `run_<suite_name>_feature_tests()` for
-   feature, or `run_<suite_name>_e2e_tests()` for E2E.
-3. For E2E suites, use `test/e2e/common/e2e_session.h` for the standard
-   open/close lifecycle. CMake discovers E2E `all_tests.c` manifests and
-   generates the dispatcher; do not edit a central dispatcher for a suite.
+1. Create `test/e2e/<suite_name>/all_tests.c` and one or more `test_*.c`
+   files.
+2. Give the manifest the entry point `run_<suite_name>_e2e_tests()`.
+3. Use `test/e2e/common/e2e_session.h` for the standard open/close lifecycle.
+   CMake discovers E2E `all_tests.c` manifests and generates the dispatcher;
+   do not edit a central dispatcher for a suite.
 4. Use the existing `fastrpc_test.idl` interface and deploy the common
    `libfastrpc_test_skel.so` when the suite needs no new RPC methods.
 5. If a method is needed, edit `idl/fastrpc_test.idl`, bump `IDL_VERSION`,
