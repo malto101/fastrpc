@@ -20,6 +20,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # ============================================================================
 add_executable(fastrpc_test
     "${CMAKE_SOURCE_DIR}/root_all_tests.c"
+    "${E2E_SUITE_DISPATCH_SOURCE}"
 )
 
 target_include_directories(fastrpc_test PRIVATE

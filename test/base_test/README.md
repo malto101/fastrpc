@@ -418,6 +418,13 @@ and its group runner. There is no once-per-group setup or teardown. The
    - Append `<suite_name>` to the `_feat_suites` list
 4. Rebuild.
 
+### Add a new E2E suite
+
+1. Create `test/e2e/<suite_name>/` containing an `all_tests.c` that defines
+   `void run_<suite_name>_e2e_tests(void)`, plus one or more test or utility sources.
+2. Rebuild. CMake discovers E2E suite manifests in sorted path order and generates
+   the dispatcher; no root runner or E2E CMake registration edit is needed.
+
 ### Add a new IDL method
 
 1. Edit `idl/fastrpc_test.idl` — add the method declaration.

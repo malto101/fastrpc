@@ -19,13 +19,11 @@
 #include <string.h>
 #include <unistd.h>
 
-void run_calculator_e2e_tests(void);
-void run_hap_example_e2e_tests(void);
+void run_e2e_suite_tests(void);
 
 static void run_all_tests(void)
 {
-    run_calculator_e2e_tests();
-    run_hap_example_e2e_tests();
+    run_e2e_suite_tests();
 }
 
 static int parse_worker_value(const char **argv, int argc, int *index,
