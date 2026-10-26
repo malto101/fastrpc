@@ -1,14 +1,13 @@
 // Copyright (c) Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include "../../fastrpc_utils/test_utils.h"
-#include "../../test_process.h"
+#include "../fastrpc_utils/test_utils.h"
+#include "../test_process.h"
 #include "unity_fixture.h"           /* Include to get Unity types */
 #include "unity_fixture_internals.h" /* For UnityFixture (GroupFilter/Group/NameFilter/Name) */
 #include "unity_internals.h"
 
 #include <limits.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,8 +23,6 @@
 #define CLR_RESET "\033[0m"
 #define CLR_BOLD "\033[1m"
 #define CLR_DIM "\033[2m"
-#define CLR_GREEN "\033[32m"
-#define CLR_RED "\033[31m"
 #define CLR_YELLOW "\033[33m"
 #define CLR_CYAN "\033[36m"
 #define CLR_BGREEN "\033[1;32m"
@@ -307,7 +304,7 @@ static void invoke_original_unity_test_runner(
 }
 
 /* Now include our header which redefines UnityTestRunner macro */
-#include "unity_fixture_file_output.h"
+#include "base_test_runner.h"
 
 /* =========================================================================
  * Unified test metadata registry — dynamically sized sorted vector
@@ -806,7 +803,7 @@ static int test_passes_unity_and_tags(const char *group, const char *name)
 }
 
 /* Track whether the custom test runner is active. */
-static int file_output_active = 0;
+static int runner_active = 0;
 static unsigned int s_summary_total;
 static unsigned int s_summary_failures;
 static unsigned int s_summary_ignored;
@@ -819,25 +816,22 @@ void unity_test_case_set_summary(unsigned int total, unsigned int failures,
     s_summary_ignored = ignored;
 }
 
-int UnityFixtureFileOutputBegin(const char *output_dir, const char *base_name)
+int BaseTestRunnerBegin(void)
 {
-    (void)output_dir;
-    (void)base_name;
-
-    file_output_active = 1;
+    runner_active = 1;
     print_suite_banner("FastRPC Tests");
     return 0;
 }
 
-int UnityFixtureFileOutputEnd(void)
+int BaseTestRunnerEnd(void)
 {
-    if (!file_output_active) {
+    if (!runner_active) {
         return 0;
     }
 
     print_summary(s_summary_total, s_summary_failures, s_summary_ignored);
 
-    file_output_active = 0;
+    runner_active = 0;
     return 0;
 }
 
@@ -845,7 +839,7 @@ int UnityFixtureFileOutputEnd(void)
  * is_test_selected
  *
  * Mirrors Unity's internal filter logic from unity_fixture.c so that
- * UnityTestRunnerWithFileOutput can determine — before calling
+ * BaseTestRunnerRunTest can determine — before calling
  * original_unity_test_runner — whether a given (group, name) pair would
  * actually be executed under the current filter settings.
  *
@@ -1056,7 +1050,7 @@ int unity_test_case_registry_print_tags(void)
     return 0;
 }
 
-void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_body,
+void BaseTestRunnerRunTest(unityfunction *setup, unityfunction *test_body,
                                    unityfunction *teardown, const char *printable_name,
                                    const char *group, const char *name, const char *file,
                                    unsigned int line)
@@ -1065,7 +1059,7 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
     int test_passed, test_ignored;
     const char *message = NULL;
 
-    if (!file_output_active || test_process_is_worker()) {
+    if (!runner_active || test_process_is_worker()) {
         invoke_original_unity_test_runner(setup, test_body, teardown, printable_name, group, name,
                                            file, line);
         return;
@@ -1204,7 +1198,7 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
     }
 }
 
-int UnityMainWithFileOutput(int argc, const char *argv[], void (*run_all_tests)(void))
+int BaseTestRunnerMain(int argc, const char *argv[], void (*run_all_tests)(void))
 {
     unsigned int total = 0;
     unsigned int failures = 0;

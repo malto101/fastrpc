@@ -6,7 +6,7 @@
  * @brief Root dispatcher for the standalone base-test binary.
  */
 
-#include "reporting/unity/unity_fixture_file_output.h"
+#include "test_runner/base_test_runner.h"
 #include "test_process.h"
 #include "test_utils.h"
 #include "unity_fixture.h"
@@ -337,8 +337,8 @@ static int run_base_tests(int argc, const char *argv[])
         return result == 0 ? 0 : 2;
     }
 
-    if (UnityFixtureFileOutputBegin(NULL, NULL) != 0)
-        fprintf(stderr, "Warning: Failed to initialize custom Unity output\n");
+    if (BaseTestRunnerBegin() != 0)
+        fprintf(stderr, "Warning: Failed to initialize base-test runner\n");
 
     for (int i = 0; i < g_test_config.domain_count; i++) {
         int domain_result;
@@ -349,7 +349,7 @@ static int run_base_tests(int argc, const char *argv[])
         printf("\n[test_config] running tests on %s domain (%d)\n",
                domain_name ? domain_name : "<invalid>", g_test_config.domain_id);
         unity_test_case_dispatch_reset();
-        domain_result = UnityMainWithFileOutput(filtered_argc, filtered_argv, run_all_tests);
+        domain_result = BaseTestRunnerMain(filtered_argc, filtered_argv, run_all_tests);
         summary_total += Unity.NumberOfTests;
         summary_failures += Unity.TestFailures;
         summary_ignored += Unity.TestIgnores;
@@ -358,7 +358,7 @@ static int run_base_tests(int argc, const char *argv[])
     }
 
     unity_test_case_set_summary(summary_total, summary_failures, summary_ignored);
-    UnityFixtureFileOutputEnd();
+    BaseTestRunnerEnd();
     test_config_free_argv(filtered_argv);
     return result;
 }

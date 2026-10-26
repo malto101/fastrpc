@@ -11,7 +11,7 @@ FastRPC build does not require CMake, QAIC, Unity, or a Hexagon compiler.
 Tests are organized as E2E suites under `test/base_test/test/e2e/`. Each suite
 provides an `all_tests.c` suite entry point alongside its `test_*.c` files. The
 entry point runs that suite's Unity groups; cases remain annotated with the
-shared metadata and reporting helpers.
+shared metadata, selection, and runner helpers.
 
 E2E suites use the shared generated stub and skeleton. The calculator and HAP
 example suites exercise the common `idl/fastrpc_test.idl` interface. A target
@@ -327,7 +327,7 @@ test/e2e/<suite_name>/
 
 `all_tests.c` is the suite manifest and entry point; it runs the Unity group
 runners defined by the suite's `test_*.c` files. Keep one suite's groups and
-cases in that suite's directory, and use the shared metadata, reporting, and
+cases in that suite's directory, and use the shared metadata, selection, and
 error-code helpers. The E2E category build wiring is the source of truth for
 the suites that are built; there is no separate README inventory to keep
 synchronized.

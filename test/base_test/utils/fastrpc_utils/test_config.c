@@ -229,8 +229,8 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
              * --silent  — suppress the per-test header/dot/footer block for
              * tests that pass; failed and skipped tests still print their
              * full block. Implemented by buffering each test's stdout output
-             * and discarding it on a pass (see UnityTestRunnerWithFileOutput
-             * in unity_fixture_file_output.c). Consumed here; never
+             * and discarding it on a pass (see BaseTestRunnerRunTest
+             * in base_test_runner.c). Consumed here; never
              * forwarded to UnityMain().
              */
             g_test_config.silent_mode = 1;

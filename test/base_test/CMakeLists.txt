@@ -262,7 +262,7 @@ target_compile_definitions(common_test_iface INTERFACE
     ${PLATFORM_C_DEFS}
     ${UNITY_COMPILE_DEFS})
 target_compile_options(common_test_iface INTERFACE
-    "-include${CMAKE_SOURCE_DIR}/utils/reporting/unity/unity_fixture_file_output.h")
+    "-include${CMAKE_SOURCE_DIR}/utils/test_runner/base_test_runner.h")
 
 add_library(common_test_dep INTERFACE)
 target_link_libraries(common_test_dep INTERFACE
