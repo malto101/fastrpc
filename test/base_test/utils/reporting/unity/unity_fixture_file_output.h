@@ -47,9 +47,9 @@ typedef enum {
 } test_signal_policy_t;
 
 /*
- * Canonical metadata for one (group, name) pair. Descriptor and list storage
- * supplied to the registration API must have static lifetime. The declaration
- * macro is intended for file-scope C11 declarations.
+ * Canonical metadata for one (group, name) pair. Descriptor storage supplied to
+ * the registration API must have static lifetime. The declaration macro is
+ * intended for file-scope C11 declarations.
  */
 typedef struct unity_test_case_metadata {
     const char *group;
@@ -64,7 +64,6 @@ typedef struct unity_test_case_metadata {
     unsigned has_domains : 1;
     unsigned has_expected_signal : 1;
     unsigned invalid : 1;
-    struct unity_test_case_metadata *next;
 } unity_test_case_metadata_t;
 
 void unity_test_case_metadata_register(unity_test_case_metadata_t *entry);
@@ -135,7 +134,7 @@ void unity_test_case_ignore(const char *printable_name, const char *group,
 
 #define TEST_CASE_METADATA(metadata_group, metadata_name, ...)                         \
     static unity_test_case_metadata_t _utmd_entry_##metadata_group##_##metadata_name = \
-        { .group = #metadata_group, .name = #metadata_name, .next = NULL __VA_ARGS__ }; \
+        { .group = #metadata_group, .name = #metadata_name __VA_ARGS__ };             \
     UNITY_METADATA_CONSTRUCTOR UNITY_METADATA_USED static void                         \
     _utmd_register_##metadata_group##_##metadata_name(void)                            \
     {                                                                                  \

@@ -12,8 +12,14 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
+
+#ifndef SIZE_MAX
+#define SIZE_MAX ((size_t)-1)
+#endif
 
 /* ANSI colour codes -- only emitted when stdout is a tty (see use_color()). */
 #define CLR_RESET "\033[0m"
@@ -278,11 +284,13 @@ static unity_test_runner_fn original_unity_test_runner = UnityTestRunner;
 #include "unity_fixture_file_output.h"
 
 /* =========================================================================
- * Unified test metadata registry — self-registering linked list
+ * Unified test metadata registry — dynamically sized sorted vector
  *
  * TEST_CASE_METADATA() emits constructors that register descriptors at program
- * startup. The registry is queried by filtering, listing, domain-support, and
- * signal-policy code.
+ * startup. Entries are kept in a vector and sorted lazily by (group, name), so
+ * runtime lookups use binary search instead of walking a linked list. The
+ * registry is queried by filtering, listing, domain-support, and signal-policy
+ * code.
  *
  * Filtering semantics:
  *   --any-tags A B  — run if the test's tags contain A OR B  (OR filter).
@@ -291,34 +299,101 @@ static unity_test_runner_fn original_unity_test_runner = UnityTestRunner;
  *   Neither active  — every test runs (filter inactive).
  * ========================================================================= */
 
-static unity_test_case_metadata_t *s_test_case_metadata_registry_head = NULL;
-static int s_test_case_metadata_invalid = 0;
-
 typedef struct unity_test_case_dispatch {
     char *group;
     char *name;
-    struct unity_test_case_dispatch *next;
 } unity_test_case_dispatch_t;
 
-static unity_test_case_dispatch_t *s_test_case_dispatch_head = NULL;
-static int s_test_case_dispatch_invalid = 0;
+static unity_test_case_metadata_t **s_test_case_metadata_registry;
+static size_t s_test_case_metadata_count;
+static size_t s_test_case_metadata_capacity;
+static int s_test_case_metadata_sorted = 1;
+static int s_test_case_metadata_invalid;
+
+static unity_test_case_dispatch_t *s_test_case_dispatch;
+static size_t s_test_case_dispatch_count;
+static size_t s_test_case_dispatch_capacity;
+static int s_test_case_dispatch_sorted = 1;
+static int s_test_case_dispatch_invalid;
 
 static int is_test_selected(const char *group, const char *name);
 
-static unity_test_case_metadata_t *metadata_find_mutable(const char *group, const char *name)
+static int metadata_entry_compare(const void *left, const void *right)
 {
-    unity_test_case_metadata_t *entry;
+    const unity_test_case_metadata_t *const *left_entry = left;
+    const unity_test_case_metadata_t *const *right_entry = right;
+    int group_result = strcmp((*left_entry)->group, (*right_entry)->group);
+
+    if (group_result != 0)
+        return group_result;
+    return strcmp((*left_entry)->name, (*right_entry)->name);
+}
+
+static void metadata_prepare(void)
+{
+    if (!s_test_case_metadata_sorted && s_test_case_metadata_count > 1) {
+        qsort(s_test_case_metadata_registry, s_test_case_metadata_count,
+              sizeof(*s_test_case_metadata_registry), metadata_entry_compare);
+        s_test_case_metadata_sorted = 1;
+    }
+}
+
+static ssize_t metadata_find_index(const char *group, const char *name)
+{
+    size_t low = 0;
+    size_t high;
 
     if (!group || !name)
-        return NULL;
+        return -1;
+    metadata_prepare();
+    high = s_test_case_metadata_count;
+    while (low < high) {
+        size_t middle = low + (high - low) / 2;
+        unity_test_case_metadata_t *entry = s_test_case_metadata_registry[middle];
+        int result = strcmp(group, entry->group);
 
-    entry = s_test_case_metadata_registry_head;
-    while (entry) {
-        if (strcmp(entry->group, group) == 0 && strcmp(entry->name, name) == 0)
-            return entry;
-        entry = entry->next;
+        if (result == 0)
+            result = strcmp(name, entry->name);
+        if (result == 0)
+            return (ssize_t)middle;
+        if (result < 0)
+            high = middle;
+        else
+            low = middle + 1;
     }
-    return NULL;
+    return -1;
+}
+
+static unity_test_case_metadata_t *metadata_find_mutable(const char *group, const char *name)
+{
+    ssize_t index = metadata_find_index(group, name);
+
+    return index < 0 ? NULL : s_test_case_metadata_registry[index];
+}
+
+static int metadata_reserve(size_t needed)
+{
+    size_t capacity;
+    unity_test_case_metadata_t **entries;
+
+    if (needed <= s_test_case_metadata_capacity)
+        return 0;
+    if (s_test_case_metadata_capacity == 0)
+        capacity = 16;
+    else if (s_test_case_metadata_capacity > SIZE_MAX / 2)
+        capacity = needed;
+    else
+        capacity = s_test_case_metadata_capacity * 2;
+    if (capacity < needed)
+        capacity = needed;
+    if (capacity < needed || capacity > SIZE_MAX / sizeof(*entries))
+        return -1;
+    entries = realloc(s_test_case_metadata_registry, capacity * sizeof(*entries));
+    if (!entries)
+        return -1;
+    s_test_case_metadata_registry = entries;
+    s_test_case_metadata_capacity = capacity;
+    return 0;
 }
 
 static int metadata_validate_entry(const unity_test_case_metadata_t *entry)
@@ -394,9 +469,12 @@ static void metadata_register_fields(unity_test_case_metadata_t *entry)
         metadata_mark_invalid(entry, "duplicate descriptor");
         return;
     }
-
-    entry->next = s_test_case_metadata_registry_head;
-    s_test_case_metadata_registry_head = entry;
+    if (metadata_reserve(s_test_case_metadata_count + 1) != 0) {
+        metadata_mark_invalid(entry, "registry allocation");
+        return;
+    }
+    s_test_case_metadata_registry[s_test_case_metadata_count++] = entry;
+    s_test_case_metadata_sorted = 0;
 }
 
 void unity_test_case_metadata_register(unity_test_case_metadata_t *entry)
@@ -419,15 +497,82 @@ int unity_test_case_metadata_validate(void)
     return s_test_case_metadata_invalid ? -1 : 0;
 }
 
+static int dispatch_entry_compare(const void *left, const void *right)
+{
+    const unity_test_case_dispatch_t *left_entry = left;
+    const unity_test_case_dispatch_t *right_entry = right;
+    int group_result = strcmp(left_entry->group, right_entry->group);
+
+    if (group_result != 0)
+        return group_result;
+    return strcmp(left_entry->name, right_entry->name);
+}
+
+static void dispatch_prepare(void)
+{
+    if (!s_test_case_dispatch_sorted && s_test_case_dispatch_count > 1) {
+        qsort(s_test_case_dispatch, s_test_case_dispatch_count,
+              sizeof(*s_test_case_dispatch), dispatch_entry_compare);
+        s_test_case_dispatch_sorted = 1;
+    }
+}
+
+static ssize_t dispatch_find_index(const char *group, const char *name)
+{
+    size_t low = 0;
+    size_t high;
+
+    if (!group || !name)
+        return -1;
+    dispatch_prepare();
+    high = s_test_case_dispatch_count;
+    while (low < high) {
+        size_t middle = low + (high - low) / 2;
+        unity_test_case_dispatch_t *entry = &s_test_case_dispatch[middle];
+        int result = strcmp(group, entry->group);
+
+        if (result == 0)
+            result = strcmp(name, entry->name);
+        if (result == 0)
+            return (ssize_t)middle;
+        if (result < 0)
+            high = middle;
+        else
+            low = middle + 1;
+    }
+    return -1;
+}
+
 static unity_test_case_dispatch_t *dispatch_find(const char *group, const char *name)
 {
-    unity_test_case_dispatch_t *entry;
+    ssize_t index = dispatch_find_index(group, name);
 
-    for (entry = s_test_case_dispatch_head; entry; entry = entry->next) {
-        if (strcmp(entry->group, group) == 0 && strcmp(entry->name, name) == 0)
-            return entry;
-    }
-    return NULL;
+    return index < 0 ? NULL : &s_test_case_dispatch[index];
+}
+
+static int dispatch_reserve(size_t needed)
+{
+    size_t capacity;
+    unity_test_case_dispatch_t *entries;
+
+    if (needed <= s_test_case_dispatch_capacity)
+        return 0;
+    if (s_test_case_dispatch_capacity == 0)
+        capacity = 16;
+    else if (s_test_case_dispatch_capacity > SIZE_MAX / 2)
+        capacity = needed;
+    else
+        capacity = s_test_case_dispatch_capacity * 2;
+    if (capacity < needed)
+        capacity = needed;
+    if (capacity < needed || capacity > SIZE_MAX / sizeof(*entries))
+        return -1;
+    entries = realloc(s_test_case_dispatch, capacity * sizeof(*entries));
+    if (!entries)
+        return -1;
+    s_test_case_dispatch = entries;
+    s_test_case_dispatch_capacity = capacity;
+    return 0;
 }
 
 static char *dispatch_strdup(const char *value)
@@ -454,54 +599,56 @@ void unity_test_case_dispatch_observe(const char *group, const char *name)
         s_test_case_dispatch_invalid = 1;
         return;
     }
-
-    entry = calloc(1, sizeof(*entry));
-    if (!entry) {
+    if (dispatch_reserve(s_test_case_dispatch_count + 1) != 0) {
         s_test_case_dispatch_invalid = 1;
         return;
     }
+
+    entry = &s_test_case_dispatch[s_test_case_dispatch_count];
     entry->group = dispatch_strdup(group);
     entry->name = dispatch_strdup(name);
     if (!entry->group || !entry->name) {
         free(entry->group);
         free(entry->name);
-        free(entry);
+        entry->group = NULL;
+        entry->name = NULL;
         s_test_case_dispatch_invalid = 1;
         return;
     }
-    entry->next = s_test_case_dispatch_head;
-    s_test_case_dispatch_head = entry;
+    s_test_case_dispatch_count++;
+    s_test_case_dispatch_sorted = 0;
 }
 
 void unity_test_case_dispatch_reset(void)
 {
-    unity_test_case_dispatch_t *entry = s_test_case_dispatch_head;
-
-    while (entry) {
-        unity_test_case_dispatch_t *next = entry->next;
-        free(entry->group);
-        free(entry->name);
-        free(entry);
-        entry = next;
+    for (size_t i = 0; i < s_test_case_dispatch_count; i++) {
+        free(s_test_case_dispatch[i].group);
+        free(s_test_case_dispatch[i].name);
     }
-    s_test_case_dispatch_head = NULL;
+    free(s_test_case_dispatch);
+    s_test_case_dispatch = NULL;
+    s_test_case_dispatch_count = 0;
+    s_test_case_dispatch_capacity = 0;
+    s_test_case_dispatch_sorted = 1;
     s_test_case_dispatch_invalid = 0;
 }
 
 int unity_test_case_dispatch_validate(void)
 {
-    unity_test_case_dispatch_t *dispatch;
     int invalid = s_test_case_dispatch_invalid;
 
-    for (dispatch = s_test_case_dispatch_head; dispatch; dispatch = dispatch->next) {
+    dispatch_prepare();
+    for (size_t i = 0; i < s_test_case_dispatch_count; i++) {
+        unity_test_case_dispatch_t *dispatch = &s_test_case_dispatch[i];
         if (!unity_test_case_metadata_find(dispatch->group, dispatch->name)) {
             fprintf(stderr, "[metadata] dispatched test %s.%s has no metadata\n",
                     dispatch->group, dispatch->name);
             invalid = 1;
         }
     }
-    for (unity_test_case_metadata_t *entry = s_test_case_metadata_registry_head;
-         entry; entry = entry->next) {
+    metadata_prepare();
+    for (size_t i = 0; i < s_test_case_metadata_count; i++) {
+        unity_test_case_metadata_t *entry = s_test_case_metadata_registry[i];
         if (!entry->invalid && !dispatch_find(entry->group, entry->name) &&
             unity_test_case_selected(entry->group, entry->name)) {
             fprintf(stderr, "[metadata] selected test %s.%s was not dispatched\n",
@@ -527,11 +674,11 @@ void unity_test_case_ignore(const char *printable_name, const char *group,
 
 int unity_test_case_group_has_selected(const char *group)
 {
-    unity_test_case_metadata_t *entry;
-
     if (!group)
         return 0;
-    for (entry = s_test_case_metadata_registry_head; entry; entry = entry->next) {
+    metadata_prepare();
+    for (size_t i = 0; i < s_test_case_metadata_count; i++) {
+        unity_test_case_metadata_t *entry = s_test_case_metadata_registry[i];
         if (strcmp(entry->group, group) == 0 && !entry->invalid &&
             unity_test_case_selected(group, entry->name))
             return 1;
@@ -703,17 +850,6 @@ static int is_test_selected(const char *group, const char *name)
     return name_ok;
 }
 
-static int registry_entry_compare(const void *left, const void *right)
-{
-    const unity_test_case_metadata_t *const *left_entry = left;
-    const unity_test_case_metadata_t *const *right_entry = right;
-    int group_result = strcmp((*left_entry)->group, (*right_entry)->group);
-
-    if (group_result != 0)
-        return group_result;
-    return strcmp((*left_entry)->name, (*right_entry)->name);
-}
-
 static int metadata_matches_listing_domains(const unity_test_case_metadata_t *entry)
 {
     if (g_test_config.domain_count == 0)
@@ -729,7 +865,6 @@ static int metadata_matches_listing_domains(const unity_test_case_metadata_t *en
 
 static unity_test_case_metadata_t **get_selected_registry_entries(size_t *selected_count)
 {
-    unity_test_case_metadata_t *entry;
     unity_test_case_metadata_t **entries;
     size_t count = 0;
     size_t index = 0;
@@ -737,7 +872,9 @@ static unity_test_case_metadata_t **get_selected_registry_entries(size_t *select
     if (!selected_count)
         return NULL;
 
-    for (entry = s_test_case_metadata_registry_head; entry != NULL; entry = entry->next) {
+    metadata_prepare();
+    for (size_t i = 0; i < s_test_case_metadata_count; i++) {
+        unity_test_case_metadata_t *entry = s_test_case_metadata_registry[i];
         if (entry->invalid)
             continue;
         if (is_test_selected(entry->group, entry->name) &&
@@ -756,14 +893,14 @@ static unity_test_case_metadata_t **get_selected_registry_entries(size_t *select
         return NULL;
     }
 
-    for (entry = s_test_case_metadata_registry_head; entry != NULL; entry = entry->next) {
+    for (size_t i = 0; i < s_test_case_metadata_count; i++) {
+        unity_test_case_metadata_t *entry = s_test_case_metadata_registry[i];
         if (!entry->invalid && is_test_selected(entry->group, entry->name) &&
             unity_test_case_tag_filter_passes(entry->group, entry->name) &&
             metadata_matches_listing_domains(entry))
             entries[index++] = entry;
     }
 
-    qsort(entries, count, sizeof(*entries), registry_entry_compare);
     return entries;
 }
 
@@ -844,12 +981,13 @@ int unity_test_case_registry_print_groups(void)
 
 int unity_test_case_registry_print_tags(void)
 {
-    const unity_test_case_metadata_t *entry;
     const char **tags;
     size_t capacity = 0;
     size_t count = 0;
 
-    for (entry = s_test_case_metadata_registry_head; entry != NULL; entry = entry->next) {
+    metadata_prepare();
+    for (size_t i = 0; i < s_test_case_metadata_count; i++) {
+        const unity_test_case_metadata_t *entry = s_test_case_metadata_registry[i];
         if (!entry->invalid && metadata_entry_has_tags(entry))
             capacity += entry->tag_count;
     }
@@ -863,7 +1001,8 @@ int unity_test_case_registry_print_tags(void)
         return -1;
     }
 
-    for (entry = s_test_case_metadata_registry_head; entry != NULL; entry = entry->next) {
+    for (size_t i = 0; i < s_test_case_metadata_count; i++) {
+        const unity_test_case_metadata_t *entry = s_test_case_metadata_registry[i];
         if (entry->invalid)
             continue;
         if (collect_registry_tags(entry, tags, capacity, &count) != 0) {
