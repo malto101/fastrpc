@@ -2,24 +2,36 @@
 
 Feature test suite for the Qualcomm FastRPC library.
 
-## Process isolation and concurrency
+## Process isolation and test lifecycle
 
-By default, each selected test case runs in a fresh worker process created by
-`fork()` followed immediately by `exec()` of the current `fastrpc_test` binary.
-The parent test runner owns Unity counters and reporting; the worker owns its own
-FastRPC session and is never entered through `fork()` after FastRPC initialization.
-The worker sends a bounded, versioned result frame and captured output to the parent.
-The supervisor also uses a close-on-exec handshake to distinguish `exec()`/descriptor
+By default, each selected test runs in a fresh child process created by `fork()`
+followed immediately by `exec()` of the current `fastrpc_test` binary. The parent
+test runner owns Unity counters and reporting; the child owns the test's FastRPC
+session and is never entered through `fork()` after FastRPC initialization. The
+child sends a bounded, versioned result frame and captured output to the parent.
+
+Each test has only per-test setup and teardown hooks. A test group is an
+organizational and selection unit; it has no setup or teardown hooks and cannot
+provide state to its tests. The test lifecycle is:
+
+1. Run test setup in the child.
+2. If setup fails, do not run the test body.
+3. Run teardown after setup, including when setup or the body fails.
+4. Treat teardown failure as a test failure, even when the body passed.
+5. If the child crashes or times out, normal teardown cannot run; the parent
+   reports that test as failed and continues with the next selected test.
+
+The supervisor uses a close-on-exec handshake to distinguish `exec()`/descriptor
 setup failures from malformed worker results. Expected signals are classified only
 from `waitpid()` status; a malformed or trailing result frame is never reclassified
 as a passing signal. Signals, non-zero exits, malformed results, and timeouts fail
-only that case and later cases continue to run.
+only that test and later tests continue to run.
 
 Only `fastrpc_test` is required for the host-side process-isolation path. The
 worker mode is selected through private command-line arguments and is not a
 separate deployment artifact. `FASTRPC_TEST_WORKER` may be used to override the
 executable for an external diagnostic worker. Use `--timeout-ms <milliseconds>`
-to bound a case. `--isolation=in-process` is a debugging escape hatch only and
+to bound a test. `--isolation=in-process` is a debugging escape hatch only and
 does not protect the runner from a crash.
 
 Tests that intentionally exercise a signal must declare
