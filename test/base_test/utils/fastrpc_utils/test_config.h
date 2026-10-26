@@ -24,18 +24,7 @@ typedef struct {
     int domain_count;
     int unsigned_pd;
     int silent_mode; /**< --silent; suppress per-test output for passing tests */
-    int isolation_process; /**< 1 for exec-isolated cases, 0 for debug in-process mode */
-    unsigned timeout_ms; /**< worker timeout; zero selects the default */
     test_list_mode_t list_mode;
-
-    /* Worker-only selector state. These options are consumed before Unity. */
-    int worker_mode;
-    int worker_result_fd;
-    int worker_domain_id;
-    int worker_unsigned_pd;
-    const char *worker_group;
-    const char *worker_name;
-    const char *worker_executable;
     const char *any_tags[TEST_CONFIG_MAX_TAGS]; /**< --any-tags values (OR filter) */
     int any_tag_count;                          /**< number of active --any-tags entries */
     const char *all_tags[TEST_CONFIG_MAX_TAGS]; /**< --all-tags values (AND filter) */

@@ -2,19 +2,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "../../fastrpc_utils/test_utils.h"
-#include "../../test_process.h"
 #include "unity_fixture.h"           /* Include to get Unity types */
 #include "unity_fixture_internals.h" /* For UnityFixture (GroupFilter/Group/NameFilter/Name) */
 #include "unity_internals.h"
 
-#include <limits.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #ifndef SIZE_MAX
 #define SIZE_MAX ((size_t)-1)
@@ -619,7 +614,7 @@ void unity_test_case_dispatch_observe(const char *group, const char *name)
 {
     unity_test_case_dispatch_t *entry;
 
-    if (test_process_is_worker() || !group || !name)
+    if (!group || !name)
         return;
     if (dispatch_find(group, name)) {
         fprintf(stderr, "[metadata] test %s.%s was dispatched more than once\n",
@@ -690,11 +685,6 @@ int unity_test_case_dispatch_validate(void)
 void unity_test_case_ignore(const char *printable_name, const char *group,
                            const char *name)
 {
-    if (test_process_is_worker()) {
-        UnityIgnoreTest(printable_name, group, name);
-        return;
-    }
-
     if (!unity_test_case_selected(group, name))
         return;
     UnityIgnoreTest(printable_name, group, name);
@@ -1065,7 +1055,7 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
     int test_passed, test_ignored;
     const char *message = NULL;
 
-    if (!file_output_active || test_process_is_worker()) {
+    if (!file_output_active) {
         invoke_original_unity_test_runner(setup, test_body, teardown, printable_name, group, name,
                                            file, line);
         return;
@@ -1088,119 +1078,30 @@ void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_bod
     failures_before = Unity.TestFailures;
     ignores_before = Unity.TestIgnores;
 
-    if (!g_test_config.isolation_process) {
-        if (!g_test_config.silent_mode)
-            print_test_header(group, name);
-        invoke_original_unity_test_runner(setup, test_body, teardown, printable_name, group, name,
-                                           file, line);
-        if (!g_test_config.silent_mode)
-            putchar('\n');
-        fflush(stdout);
-        test_ignored = Unity.TestIgnores > ignores_before;
-        test_passed = Unity.TestFailures == failures_before && !test_ignored;
-        message = test_ignored || !test_passed ? Unity.CurrentDetail1 : NULL;
-        {
-            int code_count = 0;
-            const int *codes = test_utils_get_accumulated_error_codes(&code_count);
-            unity_test_outcome_t outcome = {
-                .passed = test_passed,
-                .ignored = test_ignored,
-                .file = Unity.TestFile,
-                .failure_line = (unsigned int)Unity.CurrentTestLineNumber,
-                .message = message,
-                .error_codes = codes,
-                .error_count = code_count,
-                .error_codes_truncated = test_utils_error_codes_truncated(),
-            };
-            print_test_outcome(&outcome);
-        }
-        return;
-    }
-
+    if (!g_test_config.silent_mode)
+        print_test_header(group, name);
+    invoke_original_unity_test_runner(setup, test_body, teardown, printable_name, group, name,
+                                      file, line);
+    if (!g_test_config.silent_mode)
+        putchar('\n');
+    fflush(stdout);
+    test_ignored = Unity.TestIgnores > ignores_before;
+    test_passed = Unity.TestFailures == failures_before && !test_ignored;
+    message = test_ignored || !test_passed ? Unity.CurrentDetail1 : NULL;
     {
-        char worker_path[PATH_MAX];
-        test_process_request_t request;
-        test_process_outcome_t outcome;
-        const unity_test_case_metadata_t *metadata;
-        int code_count;
-        const int *codes;
-        int codes_truncated;
-
-        if (test_process_default_worker_path(worker_path, sizeof(worker_path)) != 0) {
-            test_process_result_init(&outcome.result);
-            outcome.result.status = TEST_PROCESS_LAUNCH_FAILURE;
-            snprintf(outcome.result.message, sizeof(outcome.result.message),
-                     "cannot determine base-test worker path");
-            outcome.output = NULL;
-            outcome.output_length = 0;
-            outcome.output_truncated = 0;
-        } else {
-            metadata = unity_test_case_metadata_find(group, name);
-            request = (test_process_request_t){
-                .worker_path = worker_path,
-                .domain_id = g_test_config.domain_id,
-                .unsigned_pd = g_test_config.unsigned_pd,
-                .group = group,
-                .name = name,
-                .timeout_ms = g_test_config.timeout_ms,
-                .expected_signal = metadata && metadata->has_expected_signal
-                                       ? metadata->signal_number
-                                       : 0,
-                .expected_signal_policy = metadata && metadata->has_expected_signal &&
-                                                  metadata->pass_on_signal
-                                              ? TEST_PROCESS_EXPECTED_SIGNAL_PASS
-                                              : TEST_PROCESS_EXPECTED_SIGNAL_FAIL,
-            };
-            if (test_process_run(&request, &outcome) != 0) {
-                test_process_result_init(&outcome.result);
-                outcome.result.status = TEST_PROCESS_LAUNCH_FAILURE;
-                snprintf(outcome.result.message, sizeof(outcome.result.message),
-                         "worker supervisor failed");
-                outcome.output = NULL;
-                outcome.output_length = 0;
-                outcome.output_truncated = 0;
-            }
-        }
-
-        test_ignored = outcome.result.status == TEST_PROCESS_IGNORE;
-        test_passed = outcome.result.status == TEST_PROCESS_PASS;
-        Unity.NumberOfTests++;
-        if (test_ignored)
-            Unity.TestIgnores++;
-        else if (!test_passed)
-            Unity.TestFailures++;
-
-        if (!g_test_config.silent_mode || !test_passed) {
-            print_test_header(group, name);
-        }
-
-        /* A successful worker's bootstrap/configuration output is an internal
-         * implementation detail. Keep captured output only when the case did
-         * not pass, where it can help diagnose a crash or failed assertion. */
-        if (outcome.output && !test_passed) {
-            fwrite(outcome.output, 1, outcome.output_length, stdout);
-            if (outcome.output_length == 0 || outcome.output[outcome.output_length - 1] != '\n')
-                putchar('\n');
-        }
-
-        if (!g_test_config.silent_mode || !test_passed) {
-            code_count = (int)outcome.result.error_count;
-            codes = outcome.result.error_codes;
-            codes_truncated =
-                (outcome.result.flags & TEST_PROCESS_RESULT_FLAG_ERROR_CODES_TRUNCATED) != 0;
-            unity_test_outcome_t test_outcome = {
-                .passed = test_passed,
-                .ignored = test_ignored,
-                .file = outcome.result.file[0] ? outcome.result.file : file,
-                .failure_line = outcome.result.failure_line ? outcome.result.failure_line : line,
-                .message = outcome.result.message[0] ? outcome.result.message : NULL,
-                .error_codes = codes,
-                .error_count = code_count,
-                .error_codes_truncated = codes_truncated,
-            };
-            print_test_outcome(&test_outcome);
-        }
-        test_process_outcome_free(&outcome);
+        int code_count = 0;
+        const int *codes = test_utils_get_accumulated_error_codes(&code_count);
+        unity_test_outcome_t outcome = {
+            .passed = test_passed,
+            .ignored = test_ignored,
+            .file = Unity.TestFile,
+            .failure_line = (unsigned int)Unity.CurrentTestLineNumber,
+            .message = message,
+            .error_codes = codes,
+            .error_count = code_count,
+            .error_codes_truncated = test_utils_error_codes_truncated(),
+        };
+        print_test_outcome(&outcome);
     }
 }
 

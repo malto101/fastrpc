@@ -28,8 +28,6 @@ add_library(fastrpc_test_utils STATIC
     fastrpc_utils/test_domain.c
     fastrpc_utils/test_error.c
     fastrpc_utils/test_utils.c
-    test_process.c
-    thread_group.c
 )
 add_dependencies(fastrpc_test_utils fastrpc_test_idl)
 
@@ -54,7 +52,6 @@ add_library(utils_dep INTERFACE)
 
 target_link_libraries(utils_dep INTERFACE
     fastrpc_test_utils
-    Threads::Threads
     base_test_warnings
 )
 

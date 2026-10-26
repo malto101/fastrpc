@@ -25,8 +25,6 @@ project(base_test
     DESCRIPTION "FastRPC base test suite"
 )
 
-find_package(Threads REQUIRED)
-
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
         "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
