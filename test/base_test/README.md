@@ -37,7 +37,7 @@ Install or provide the following before configuring the suite.
 | QAIC executable | Generates the test header, CPU stub, and DSP skeleton from the IDL. |
 | Unity submodule | Supplies the test framework. |
 | `libyaml` and `libbsd` for non-Android Autotools builds | Required when building the FastRPC library on Linux. |
-| Hexagon SDK/LLVM toolchain | Compiles and links the DSP skeleton. |
+| Hexagon SDK/LLVM toolchain (`HEXAGON_CLANG`, `HEXAGON_LD`) | Compiles and links the required DSP skeleton. |
 
 Initialize the submodule from the repository root:
 
@@ -104,11 +104,13 @@ platform, and `DSP_ARCH` to CMake. Its outputs are relative to the repository
 root at `test/base_test/builddir/bin/` and
 `test/base_test/builddir/idl/generated/`. Use `make base-test-clean` to remove
 that CMake build directory. Run `make distclean` before changing compilers or
-target platforms so stale CMake cache entries are not reused.
+target platforms so stale CMake cache entries are not reused. The integrated
+configuration also requires `HEXAGON_CLANG` and `HEXAGON_LD` through CMake's
+tool lookup or cache; set them explicitly when the Hexagon SDK tools are not on
+`PATH`.
 
 For a complete device build, use the standalone command below so the Hexagon
-compiler and linker can be supplied explicitly. The integrated target is still
-useful for validating the AArch64 host runner and generated CPU stub.
+compiler and linker can be supplied explicitly.
 
 ### Standalone build
 
@@ -185,9 +187,9 @@ After `cmake --build builddir`, the deployable files are in `builddir/bin/`:
 
 - `fastrpc_test` is the AArch64 CPU-side test runner. It contains the generated
   CPU stub and links to `libcdsprpc.so`.
-- `libfastrpc_test_skel.so` is the Hexagon DSP-side skeleton and test
-  implementation. It is produced only when the complete Hexagon toolchain is
-  available and configured.
+- `libfastrpc_test_skel.so` is the required Hexagon DSP-side skeleton and test
+  implementation. CMake fails during configuration when the complete Hexagon
+  compiler/linker toolchain is unavailable or cannot target `DSP_ARCH`.
 
 For a target with an `adb` deployment path, one minimal example is:
 
@@ -354,16 +356,20 @@ state, and teardown must close a handle even after a body assertion fails.
 1. Create `test/e2e/<suite_name>/all_tests.c` and one or more
    `test/e2e/<suite_name>/test_*.c` files. Use `test/e2e/common/e2e_session.h`
    for the standard open/close lifecycle.
-2. Add `<suite_name>` to `_e2e_suites` in `test/e2e/CMakeLists.txt`.
-3. Define `run_<suite_name>_e2e_tests()` in `all_tests.c`, and declare/call it
-   from `root_all_tests.c`.
-4. Use the existing `fastrpc_test.idl` interface and deploy the common
+2. Define `run_<suite_name>_e2e_tests()` in `all_tests.c`. CMake discovers the
+   manifest and generates the central dispatcher; do not edit
+   `test/e2e/CMakeLists.txt` or `root_all_tests.c` for suite registration.
+3. Use the existing `fastrpc_test.idl` interface and deploy the common
    `libfastrpc_test_skel.so` when the new suite needs no new RPC methods.
-5. If a method is needed, edit `idl/fastrpc_test.idl`, bump `IDL_VERSION`,
+4. If a method is needed, edit `idl/fastrpc_test.idl`, bump `IDL_VERSION`,
    implement it in `idl/impl/fastrpc_test_imp.c`, and let QAIC regenerate the
    stub and skeleton. Do not edit generated files.
-6. Add the suite to the feature matrix and document any additional target SDK
+5. Add the suite to the feature matrix and document any additional target SDK
    or device artifact.
+
+Suite directory names must contain only lowercase letters, digits, and
+underscores. Reconfigure or let `CONFIGURE_DEPENDS` trigger regeneration, then
+run `cmake --build builddir`.
 
 ## Source and test conventions
 
