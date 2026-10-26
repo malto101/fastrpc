@@ -50,6 +50,10 @@ if(FASTRPC_LIBRARY)
 endif()
 set(QAIC_EXECUTABLE "" CACHE FILEPATH
     "Path to the QAIC compiler used to generate the test IDL sources")
+set(HEXAGON_CLANG "" CACHE FILEPATH
+    "Clang compiler used to build the Hexagon DSP skeleton")
+set(HEXAGON_LD "" CACHE FILEPATH
+    "Linker used to link the Hexagon DSP skeleton")
 set(ANDROID_NDK_HOME "" CACHE PATH
     "Path to the Android NDK root (required when TARGET_PLATFORM=android)")
 set(DSP_ARCH "73" CACHE STRING
