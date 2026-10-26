@@ -24,6 +24,9 @@ set(_utils_all_inc
 # ----------------------------------------------------------------------------
 add_library(fastrpc_test_utils STATIC
     reporting/unity/unity_fixture_file_output.c
+    fastrpc_utils/test_config.c
+    fastrpc_utils/test_domain.c
+    fastrpc_utils/test_error.c
     fastrpc_utils/test_utils.c
     test_process.c
     thread_group.c

@@ -7,14 +7,11 @@
 #include "AEEStdErr.h"
 #include "fastrpc_common.h"
 #include "remote.h"
+#include "test_config.h"
+#include "test_error.h"
 
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
-
-#ifndef NUM_DOMAINS
-#define NUM_DOMAINS 8
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,94 +25,6 @@ extern "C" {
 
 /* Buffer size for the generated FastRPC URI plus its domain suffix. */
 #define TEST_UTILS_DOMAIN_URI_BUFFER_SIZE 512U
-
-/* Maximum number of tag values accepted per tag flag on the command line. */
-#define TEST_CONFIG_MAX_TAGS 32
-
-/* Maximum number of error codes retained for one test case. */
-#define TEST_UTILS_MAX_ERROR_CODES 32
-#define TEST_UTILS_ERROR_CODES_TRUNCATED 1
-#define TEST_UTILS_ERROR_CODES_COMPLETE 0
-#define TEST_UTILS_INVALID_ERROR_CODE INT_MIN
-
-/* domain_ids[] has room for every FastRPC domain ID.  The set of named
- * domains supported by this test is defined by the metadata table in
- * test_utils.c. */
-
-
-typedef enum {
-    TEST_LIST_NONE = 0,
-    TEST_LIST_TESTS,
-    TEST_LIST_GROUPS,
-    TEST_LIST_TAGS,
-} test_list_mode_t;
-
-/* Process-wide settings populated by main() from CLI args.
- *
- *   domain_id   : DSP domain for the current test run.
- *
- *   domain_ids[]: Domains selected for execution. With no -d argument this
- *                 is populated by probing running remoteproc instances and
- *                 their FastRPC device nodes. Repeat -d to select one or
- *                 more domains explicitly.
- *
- *   unsigned_pd : Call remote_session_control(DSPRPC_CONTROL_UNSIGNED_MODULE)
- *                 before opening handles.  Default 1; pass -u 0 to skip for
- *                 signed skels.
- *
- *   list_mode   : Metadata-only listing requested by -l or --list-*. When
- *                 active, DSP discovery and test execution are skipped.
- *
- *   any_tags[]   : OR-mode inclusion filter.  Populated by --any-tags <tag>
- *                 (repeatable, up to TEST_CONFIG_MAX_TAGS values).
- *
- *                 When any_tag_count > 0, a test passes this filter if its
- *                 test metadata annotation contains AT LEAST ONE of the
- *                 listed tags.
- *
- *   all_tags[]   : AND-mode inclusion filter.  Populated by --all-tags <tag>
- *                 (repeatable, up to TEST_CONFIG_MAX_TAGS values).
- *
- *                 When all_tag_count > 0, a test passes this filter only if
- *                 its test metadata annotation contains ALL of the listed
- *                 tags simultaneously.
- *
- *   Filter activation rules:
- *     - Both filters inactive (counts == 0): every test runs.
- *     - Only --any-tags active: test runs if it matches ANY listed tag.
- *     - Only --all-tags active: test runs if it matches ALL listed tags.
- *     - Both active: test must pass BOTH filters independently.
- *
- *   Tags are compared case-sensitively (strcmp).
- *
- *   Recommended tag vocabulary:
- *     Functionality  — "Remote", "RpcMem", "Profiling"
- *     Classification — "unit", "feature"
- *     Polarity       — "positive", "negative"
- */
-typedef struct {
-    int domain_id;
-    int domain_ids[NUM_DOMAINS];
-    int domain_count;
-    int unsigned_pd;
-    int silent_mode; /**< --silent; suppress per-test output for passing tests */
-    int isolation_process; /**< 1 for exec-isolated cases, 0 for debug in-process mode */
-    unsigned timeout_ms; /**< worker timeout; zero selects the default */
-    test_list_mode_t list_mode;
-
-    /* Worker-only selector state. These options are consumed before Unity. */
-    int worker_mode;
-    int worker_result_fd;
-    int worker_domain_id;
-    int worker_unsigned_pd;
-    const char *worker_group;
-    const char *worker_name;
-    const char *worker_executable;
-    const char *any_tags[TEST_CONFIG_MAX_TAGS]; /**< --any-tags values (OR filter) */
-    int any_tag_count;                          /**< number of active --any-tags entries       */
-    const char *all_tags[TEST_CONFIG_MAX_TAGS]; /**< --all-tags values (AND filter)            */
-    int all_tag_count;                          /**< number of active --all-tags entries       */
-} test_config_t;
 
 extern test_config_t g_test_config;
 
