@@ -11,7 +11,6 @@ After building the application, the following files and directories need to be p
 3. **linux Directory**: Contains shared libraries for the Linux platform.
 4. **v68 Directory**: Contains skeletons for the v68 architecture version.
 5. **v75 Directory**: Contains skeletons for the v75 architecture version.
-
 ### Installing the Test
 
 Use `make install` to install the libraries and the executable to the appropriate directories:
