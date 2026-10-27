@@ -175,6 +175,55 @@ sudo ldconfig              # Update dynamic linker cache
 sudo systemd-sysusers      # Create fastrpc group
 ```
 
+### Build the opt-in base_test suite with FastRPC
+
+The normal `./gitcompile` command builds FastRPC only. The base-test host
+runner is an AArch64 target binary, so an integrated cross-build must identify
+an AArch64 host target explicitly. For Linux GNU:
+
+```bash
+git submodule update --init --recursive
+
+# Reuse the standard FastRPC Linux cross-toolchain environment.
+export CC=aarch64-linux-gnu-gcc
+export CXX=aarch64-linux-gnu-g++
+export AS=aarch64-linux-gnu-as
+export LD=aarch64-linux-gnu-ld
+export AR=aarch64-linux-gnu-ar
+export RANLIB=aarch64-linux-gnu-ranlib
+export STRIP=aarch64-linux-gnu-strip
+
+# QAIC and the Hexagon tools may instead be placed on PATH.
+export QAIC_EXECUTABLE=/path/to/qaic
+export HEXAGON_CLANG=/path/to/hexagon-clang
+export HEXAGON_LD=/path/to/ld.lld
+
+./gitcompile --host=aarch64-linux-gnu --enable-base-test
+```
+
+Use `--host=aarch64-linux-android` for an AArch64 Android build. Before an
+Android build, export `ANDROID_NDK_HOME`, add its LLVM bin directory to
+`PATH`, and set `CC`, `CXX`, `AS`, `LD`, `AR`, `RANLIB`, and `STRIP` to the
+NDK tools. The configured build exposes `make base-test` and
+`make base-test-clean`; the root target builds `src/.libs/libcdsprpc.so`
+first, then configures and builds the standalone CMake project. Artifacts are
+written to `test/base_test/builddir/bin/` (the AArch64 host `fastrpc_test`
+runner and the DSP `libfastrpc_test_skel.so`), with QAIC-generated sources
+under `test/base_test/builddir/idl/generated/`. Remove the CMake build directory
+with `make distclean` before changing compilers or platform settings so stale
+CMake cache entries cannot select an old toolchain.
+
+A complete device build still requires an executable Hexagon compiler and
+linker for the DSP skeleton, plus a device-compatible `DSP_ARCH`. Set
+`HEXAGON_CLANG` and `HEXAGON_LD` in the environment, or override them in a
+standalone CMake command with `-DHEXAGON_CLANG=...` and `-DHEXAGON_LD=...`.
+QAIC and CMake are required only with `--enable-base-test`; ordinary FastRPC
+builds do not probe for either dependency.
+
+The CMake suite remains independently buildable; see
+`test/base_test/README.md` for standalone options, deployment, CLI, and
+troubleshooting instructions.
+
 ### Steps to cross-compile the project on Ubuntu
 
 1. **Install the cross compiler and required dependencies:**
