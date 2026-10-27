@@ -21,6 +21,71 @@ AS_CASE([$host],
 AM_CONDITIONAL([ANDROID_CC],
 [test "$compile_for_android" = yes])
 
+# Optional standalone CMake base-test build.  Keep all of its prerequisites
+# conditional so the normal FastRPC build remains self-contained.
+AC_ARG_ENABLE([base-test],
+  [AS_HELP_STRING([--enable-base-test],
+                  [enable the CMake base-test sub-build])],
+  [enable_base_test=$enableval],
+  [enable_base_test=no])
+AS_CASE([$enable_base_test],
+  [yes|no], [],
+  [AC_MSG_ERROR([bad value '$enable_base_test' for --enable-base-test])])
+
+AC_ARG_WITH([qaic],
+  [AS_HELP_STRING([--with-qaic=PATH],
+                  [path to the QAIC compiler used by base-test])],
+  [qaic_executable=$withval],
+  [qaic_executable=""])
+
+AC_ARG_WITH([dsp-arch],
+  [AS_HELP_STRING([--with-dsp-arch=ARCH],
+                  [Hexagon DSP architecture for base-test (default: 73)])],
+  [base_test_dsp_arch=$withval],
+  [base_test_dsp_arch=73])
+
+AC_ARG_VAR([CMAKE], [CMake executable used to build base-test])
+
+base_test_platform=linux
+AS_IF([test "$compile_for_android" = yes],
+  [base_test_platform=android])
+
+AS_IF([test "x$enable_base_test" = xyes], [
+  AS_CASE([$host_os],
+    [linux-gnu|linux-android], [],
+    [AC_MSG_ERROR([base-test supports only Linux GNU or Android targets; got $host])])
+  AS_IF([test "x$host_cpu" != xaarch64], [
+    AC_MSG_ERROR([base-test requires an aarch64 target; got $host])
+  ])
+  AS_IF([test -z "$qaic_executable" || test "$qaic_executable" = yes], [
+    AC_MSG_ERROR([--with-qaic=PATH is required with --enable-base-test])
+  ])
+  AS_IF([test ! -x "$qaic_executable"], [
+    AC_MSG_ERROR([QAIC compiler is not executable: $qaic_executable])
+  ])
+  case "$base_test_dsp_arch" in
+    ''|*[[!0123456789]]*)
+      AC_MSG_ERROR([--with-dsp-arch must contain only decimal digits]) ;;
+  esac
+  AC_PATH_PROG([CMAKE], [cmake], [no])
+  AS_IF([test "x$CMAKE" = xno], [
+    AC_MSG_ERROR([cmake is required with --enable-base-test])
+  ])
+  AS_IF([test ! -f "$srcdir/test/base_test/CMakeLists.txt"], [
+    AC_MSG_ERROR([test/base_test/CMakeLists.txt is missing])
+  ])
+  AS_IF([test ! -f "$srcdir/test/base_test/vendor/unity/CMakeLists.txt"], [
+    AC_MSG_ERROR([base-test Unity submodule is missing; run git submodule update --init --recursive])
+  ])
+])
+
+AM_CONDITIONAL([BASE_TEST_ENABLED],
+  [test "x$enable_base_test" = xyes])
+AC_SUBST([BASE_TEST_PLATFORM], [$base_test_platform])
+AC_SUBST([BASE_TEST_DSP_ARCH], [$base_test_dsp_arch])
+AC_SUBST([QAIC_EXECUTABLE], [$qaic_executable])
+AC_SUBST([CMAKE])
+
 # Add shared object versioning
 m4_define([LT_MAJOR], [1])
 m4_define([LT_MINOR], [0])
