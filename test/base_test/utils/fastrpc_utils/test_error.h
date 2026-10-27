@@ -15,9 +15,6 @@
 extern "C" {
 #endif
 
-/* Returns a human-readable string for a fastrpc/AEE error code. */
-const char *test_utils_err_str(int err);
-
 void test_utils_set_last_error_code(int err);
 int test_utils_get_last_error_code(void); /* Returns TEST_UTILS_INVALID_ERROR_CODE if none set */
 void test_utils_reset_last_error_code(void);

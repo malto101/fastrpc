@@ -234,8 +234,8 @@ ID: 3
   TEST CalculatorE2E.SumAndMaximum
     Result: FAIL
     Error codes:
-      [0] 0x00000000 (AEE_SUCCESS)
-      [1] 0x00000027 (AEE_ENOSUCH)
+      [0] 0x00000000
+      [1] 0x00000027
     Location: test/e2e/calculator/test_calculator.c:42
     Message: expected 3, got 4
 
@@ -351,7 +351,8 @@ Each selected case contributes one of these outcomes:
 
 The summary reports total, passed, failed, and skipped counts. A run with no
 failures exits successfully; invalid configuration, no discovered domain, or a
-failed test exits nonzero. Use the printed error code and the case name when
+failed test exits nonzero. Error codes are printed as numeric hexadecimal values
+in recorded order with stable indexes; use the printed code and case name when
 triaging a failure.
 
 ## Troubleshooting

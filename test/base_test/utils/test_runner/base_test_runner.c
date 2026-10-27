@@ -49,8 +49,7 @@ static void print_test_footer(int passed, int ignored, const char *file, unsigne
     if (code_count > 0) {
         printf(DETAIL_INDENT "Error codes:\n");
         for (i = 0; i < code_count; i++)
-            printf(DETAIL_INDENT "  [%d] 0x%08x (%s)\n", i, (unsigned int)codes[i],
-                   test_utils_err_str(codes[i]));
+            printf(DETAIL_INDENT "  [%d] 0x%08x\n", i, (unsigned int)codes[i]);
         if (codes_truncated)
             printf(DETAIL_INDENT "  [..] additional error codes truncated\n");
     } else if (codes_truncated) {

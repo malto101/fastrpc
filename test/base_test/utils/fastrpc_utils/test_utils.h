@@ -55,9 +55,6 @@ void test_config_free_argv(const char **argv);
  * Must be called before remote_handle_open when the skel is unsigned. */
 int test_utils_enable_unsigned_pd(int domain);
 
-/* Returns a human-readable string for a fastrpc/AEE error code. */
-const char *test_utils_err_str(int err);
-
 /* ---- Error code reporting ---- */
 
 /* Call after any FastRPC/DSP API call to store the code for the test footer.

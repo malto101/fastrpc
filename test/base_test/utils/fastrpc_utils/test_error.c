@@ -1,56 +1,7 @@
 // Copyright (c) Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include "AEEStdErr.h"
 #include "test_error.h"
-
-#include <stddef.h>
-
-/* Keep the symbolic names and values in one private canonical list.  The
- * first matching entry intentionally defines the string for aliased values. */
-#define TEST_UTILS_AEE_ERROR_CODE_LIST(_) \
-    _(AEE_SUCCESS) \
-    _(AEE_EUNKNOWN) \
-    _(AEE_EFAILED) \
-    _(AEE_ENOMEMORY) \
-    _(AEE_EBADPARM) \
-    _(AEE_EINVALIDFORMAT) \
-    _(AEE_EUNSUPPORTED) \
-    _(AEE_ENOSUCH) \
-    _(AEE_ECONNREFUSED) \
-    _(AEE_EINVHANDLE) \
-    _(AEE_EBUSY) \
-    _(AEE_EINVALIDDOMAIN) \
-    _(AEE_EINVALIDDEVICE) \
-    _(AEE_ENOTINITIALIZED) \
-    _(AEE_EUNSIGNEDMOD) \
-    _(AEE_ENOSUCHFILE) \
-    _(AEE_ENOSUCHMOD) \
-    _(AEE_EBADDOMAIN) \
-    _(AEE_ERPC) \
-    _(AEE_ENORPCMEMORY)
-
-struct test_utils_error_entry {
-    int code;
-    const char *name;
-};
-
-#define TEST_UTILS_ERROR_ENTRY(name) { name, #name },
-static const struct test_utils_error_entry s_error_table[] = {
-    TEST_UTILS_AEE_ERROR_CODE_LIST(TEST_UTILS_ERROR_ENTRY)
-};
-#undef TEST_UTILS_ERROR_ENTRY
-
-const char *test_utils_err_str(int err)
-{
-    size_t i;
-
-    for (i = 0; i < sizeof(s_error_table) / sizeof(s_error_table[0]); ++i) {
-        if (s_error_table[i].code == err)
-            return s_error_table[i].name;
-    }
-    return "(unknown error)";
-}
 
 static _Thread_local int s_last_error_code = TEST_UTILS_INVALID_ERROR_CODE;
 static _Thread_local int s_accumulated_codes[TEST_UTILS_MAX_ERROR_CODES];
@@ -98,5 +49,3 @@ void test_utils_reset_accumulated_error_codes(void)
     s_accumulated_count = 0;
     s_accumulated_truncated = TEST_UTILS_ERROR_CODES_COMPLETE;
 }
-
-#undef TEST_UTILS_AEE_ERROR_CODE_LIST
