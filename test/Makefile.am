@@ -1,5 +1,5 @@
 # Define the test programs
-bin_PROGRAMS = fastrpc_test fastrpc-healthcheck
+bin_PROGRAMS = fastrpc_test fastrpc-healthcheck fastrpc-dspqueue-regression
 
 # ------------------------
 # fastrpc_test binary
@@ -20,9 +20,19 @@ endif
 # Define the linker flags for the test program
 fastrpc_test_LDADD = -ldl $(USE_LOG)
 
+# ------------------------
+# DSP queue regression driver
+# ------------------------
+
+fastrpc_dspqueue_regression_SOURCES = fastrpc_dspqueue_regression.c
+fastrpc_dspqueue_regression_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG
+fastrpc_dspqueue_regression_LDADD = $(top_builddir)/src/libcdsprpc.la -ldl -lm $(USE_LOG)
+
 # If compiling for Android, include the Android-specific flags
 if ANDROID_CC
 fastrpc_test_CFLAGS += -DANDROID
+fastrpc_dspqueue_regression_CFLAGS += -DANDROID
+fastrpc_dspqueue_regression_LDADD += -llog
 endif
 
 # ------------------------
@@ -67,3 +77,5 @@ dist_testlib_DATA = $(foreach test,$(TESTLIST),linux/lib$(test).so)
 
 testdspdir = $(datadir)/fastrpc_test
 nobase_dist_testdsp_DATA = $(foreach test,$(TESTLIST),$(foreach dsp,$(DSPS),$(dsp)/lib$(test)_skel.so))
+
+EXTRA_DIST = fastrpc_dspqueue_regression.md
