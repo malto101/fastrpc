@@ -40,6 +40,44 @@ file:///libcalculator_skel.so?calculator_skel_handle_invoke&_modver=1.0
 The module must be in a device DSP search directory. The process also needs
 access to the matching `libcdsprpc` shared library and `/dev/fastrpc-*`.
 
+The current driver uses the calculator skeleton only as a loader/bootstrap
+fixture. It calls `remote_handle64_open()` and `remote_handle64_close()` to
+create and tear down the DSP process domain, then calls the public host-side
+`dspqueue_create()`, `dspqueue_get_stat()`, and `dspqueue_close()` APIs. It
+does not invoke the `dspqueue_test1` IDL interface, so
+`libcalculator_skel.so` is not a DSPQueue RPC provider and these artifacts do
+not claim DSP-side `dspqueue_test1` method coverage. Use `--module-uri` to
+select another compatible loader fixture.
+
+A local handoff bundle can be staged as follows (choose the DSP architecture
+that matches the device):
+
+```text
+artifacts/fastrpc-dspqueue-regression/
+  host-native/fastrpc-dspqueue-regression
+  host-native/lib/libcdsprpc.so*
+  dsp/v68/libcalculator_skel.so
+  dsp/v75/libcalculator_skel.so
+  SHA256SUMS
+```
+
+`host-native` is the native build for host diagnostics; a device deployment
+must use a host executable and `libcdsprpc.so` built for the target ABI. The
+checked-in `v68` and `v75` skeletons are ELF32 Qualcomm DSP6 objects and
+export `calculator_skel_handle_invoke`. Verify the selected pair with
+`sha256sum -c SHA256SUMS`, `readelf -h`, and `nm -D` before deployment.
+
+A dedicated DSPQueue skeleton is optional, not required by the current
+matrix. If future coverage needs DSP-side `dspqueue_test1` RPC calls, reuse the
+existing IDL and implementation in the separate `fastrpc-test` repository.
+The production QAIC compiler is
+`/local/mnt/workspace/dhruv/fastrpc/test/fastrpc-test/bin/qaic` (01.00.50);
+source generation uses `-m C` and the Hexagon SDK build rules must link the
+result with a configured Hexagon compiler. QAIC-generated C sources are not a
+DSP binary, and the `py_qaic` prototype must not be substituted for production
+DSP artifacts. Without the SDK/toolchain, report the dedicated DSP build as
+blocked rather than renaming the calculator or a host ELF.
+
 ## Device commands
 
 Example Linux deployment:
