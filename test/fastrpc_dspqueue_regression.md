@@ -31,23 +31,28 @@ make -C test fastrpc-dspqueue-regression
 The binary is `test/.libs/fastrpc-dspqueue-regression` for a libtool build (or
 `test/fastrpc-dspqueue-regression` when the platform build emits an unwrapped
 binary). Deploy the binary and a DSP module matching the URI passed with
-`--module-uri`. The default URI is:
+`--module-uri`. The default URI is the production DSPQueue skeleton:
+
+```text
+file:///libdspqueue_test1_skel.so?dspqueue_test1_skel_handle_invoke&_modver=1.0
+```
+
+The calculator URI remains available as an explicit loader-only fixture:
 
 ```text
 file:///libcalculator_skel.so?calculator_skel_handle_invoke&_modver=1.0
-```
+```,
 
 The module must be in a device DSP search directory. The process also needs
 access to the matching `libcdsprpc` shared library and `/dev/fastrpc-*`.
 
-The current driver uses the calculator skeleton only as a loader/bootstrap
-fixture. It calls `remote_handle64_open()` and `remote_handle64_close()` to
-create and tear down the DSP process domain, then calls the public host-side
-`dspqueue_create()`, `dspqueue_get_stat()`, and `dspqueue_close()` APIs. It
-does not invoke the `dspqueue_test1` IDL interface, so
-`libcalculator_skel.so` is not a DSPQueue RPC provider and these artifacts do
-not claim DSP-side `dspqueue_test1` method coverage. Use `--module-uri` to
-select another compatible loader fixture.
+The current driver loads the dedicated DSPQueue skeleton with
+`remote_handle64_open()` and tears it down with `remote_handle64_close()`,
+then calls the public host-side `dspqueue_create()`, `dspqueue_get_stat()`, and
+`dspqueue_close()` APIs. It does not invoke the `dspqueue_test1` IDL methods;
+the dedicated module is a valid DSPQueue test companion and loader, while the
+public queue lifecycle remains the coverage under test. The calculator URI
+above remains available with `--module-uri` as a generic loader-only fixture.
 
 A local handoff bundle can be staged as follows (choose the DSP architecture
 that matches the device):
@@ -56,6 +61,8 @@ that matches the device):
 artifacts/fastrpc-dspqueue-regression/
   host-native/fastrpc-dspqueue-regression
   host-native/lib/libcdsprpc.so*
+  dsp/v68/libdspqueue_test1_skel.so
+  dsp/v75/libdspqueue_test1_skel.so
   dsp/v68/libcalculator_skel.so
   dsp/v75/libcalculator_skel.so
   SHA256SUMS
@@ -63,20 +70,21 @@ artifacts/fastrpc-dspqueue-regression/
 
 `host-native` is the native build for host diagnostics; a device deployment
 must use a host executable and `libcdsprpc.so` built for the target ABI. The
-checked-in `v68` and `v75` skeletons are ELF32 Qualcomm DSP6 objects and
-export `calculator_skel_handle_invoke`. Verify the selected pair with
-`sha256sum -c SHA256SUMS`, `readelf -h`, and `nm -D` before deployment.
+production skeletons are ELF32 Qualcomm DSP6 objects and export
+`dspqueue_test1_skel_handle_invoke`; the checked-in calculator fixtures export
+`calculator_skel_handle_invoke`. Verify the selected pair with
+`sha256sum -c SHA256SUMS`, `readelf -h`, and the SDK’s
+`hexagon-llvm-objdump` before deployment.
 
-A dedicated DSPQueue skeleton is optional, not required by the current
-matrix. If future coverage needs DSP-side `dspqueue_test1` RPC calls, reuse the
-existing IDL and implementation in the separate `fastrpc-test` repository.
 The production QAIC compiler is
-`/local/mnt/workspace/dhruv/fastrpc/test/fastrpc-test/bin/qaic` (01.00.50);
-source generation uses `-m C` and the Hexagon SDK build rules must link the
-result with a configured Hexagon compiler. QAIC-generated C sources are not a
-DSP binary, and the `py_qaic` prototype must not be substituted for production
-DSP artifacts. Without the SDK/toolchain, report the dedicated DSP build as
-blocked rather than renaming the calculator or a host ELF.
+`/local/mnt/workspace/dhruv/fastrpc/test/fastrpc-test/bin/qaic` (01.00.50),
+and the Hexagon SDK build used here is
+`/local/mnt/workspace/Qualcomm/Hexagon_SDK/6.5.0.0`. The existing
+`fastrpc-test` `hexagon.min` target reuses `dspqueue_test1.idl` and
+`src_dsp/dspqueue_test1_imp.c`; generated C sources are build outputs, not
+hand-maintained artifacts. The umbrella build may include unrelated benchmark
+targets, so the focused production build uses `TREE=0` and
+`BUILD_DLLS=libdspqueue_test1_skel`.
 
 ## Device commands
 
@@ -84,7 +92,8 @@ Example Linux deployment:
 
 ```sh
 adb push test/.libs/fastrpc-dspqueue-regression /usr/local/bin/
-adb push test/v68/libcalculator_skel.so /usr/lib/rfsa/adsp/
+adb push artifacts/fastrpc-dspqueue-regression/host-native/fastrpc-dspqueue-regression /usr/local/bin/
+adb push artifacts/fastrpc-dspqueue-regression/dsp/v68/libdspqueue_test1_skel.so /usr/lib/rfsa/adsp/
 adb shell 'LD_LIBRARY_PATH=/usr/local/lib \
   /usr/local/bin/fastrpc-dspqueue-regression --domain 3 \
   --iterations 50 --queues 2 --timeout 30 --skip-unsupported \
@@ -95,8 +104,8 @@ adb pull /tmp/fastrpc-dspqueue.report .
 Example Android deployment (paths vary by product):
 
 ```sh
-adb push test/.libs/fastrpc-dspqueue-regression /data/local/tmp/
-adb push test/v68/libcalculator_skel.so /data/local/tmp/
+adb push artifacts/fastrpc-dspqueue-regression/host-native/fastrpc-dspqueue-regression /data/local/tmp/
+adb push artifacts/fastrpc-dspqueue-regression/dsp/v68/libdspqueue_test1_skel.so /data/local/tmp/
 adb shell 'cd /data/local/tmp && \
   LD_LIBRARY_PATH=/data/local/tmp \
   ./fastrpc-dspqueue-regression --domain 3 --iterations 50 --queues 2 \

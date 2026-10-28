@@ -52,7 +52,7 @@
 #define DEFAULT_NEAR_LIBRARY_COUNT 220
 #define DEFAULT_OVER_LIBRARY_COUNT 260
 #define DEFAULT_MODULE_URI \
-    "file:///libcalculator_skel.so?calculator_skel_handle_invoke&_modver=1.0"
+    "file:///libdspqueue_test1_skel.so?dspqueue_test1_skel_handle_invoke&_modver=1.0"
 #define PATH_TEMPLATE "/tmp/fpXXXXXX"
 #define MAX_QUEUES 64
 #define MAX_LIBRARY_FILES 10000
